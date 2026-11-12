@@ -161,7 +161,7 @@ button.secondary:hover { color: var(--text); border-color: var(--cyan); }
 .phone .cchip b { font-size: 11px; line-height: 1.2; }
 .phone .cchip span { font-size: 11px; color: var(--sub); }
 .phone .cchip.dim { opacity: .55; }
-.phone-tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); background: var(--deep); padding: 8px 8px 14px; flex-shrink: 0; }
+.phone-tabs { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); background: var(--deep); padding: 8px 8px 14px; flex-shrink: 0; }
 .phone-tabs button { min-height: 52px; font-size: 11px !important; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; background: none; border: 0; color: var(--muted); font: 700 12px 'DM Sans', sans-serif; cursor: pointer; }
 .phone-tabs button[aria-current] { color: var(--cyan); }
 #buildtip { min-height: 1em; }
@@ -236,3 +236,40 @@ button.danger { font: 600 15px 'DM Sans', sans-serif; color: var(--deep); backgr
 button.danger:hover { box-shadow: 0 0 24px rgba(255, 143, 208, .5); }
 #slots, #confirm { z-index: 12; }
 #settings { z-index: 11; }
+
+/* ---- Tooltips ---- */
+.tooltip { position: fixed; z-index: 50; max-width: 280px; padding: 9px 12px; border-radius: 10px; background: rgba(3, 17, 26, .96); border: 1px solid var(--line); color: var(--sub); font: 400 13px/1.45 'DM Sans', sans-serif; text-align: left; pointer-events: none; box-shadow: 0 8px 30px rgba(0, 0, 0, .45); opacity: 0; transition: opacity .12s; }
+.tooltip.show { opacity: 1; }
+.tooltip b { color: var(--text); }
+kbd { display: inline-block; min-width: 1em; margin: 0 1px; padding: 0 6px; border-radius: 5px; background: var(--line); color: var(--text); font: 600 11px/1.7 'Unbounded', sans-serif; text-align: center; }
+
+/* ---- Tutorial card (HUD, top right) ---- */
+.tutorial { position: absolute; top: 68px; right: 28px; width: 300px; padding: 14px 16px 12px; border-radius: 16px; background: rgba(3, 17, 26, .72); border: 1px solid var(--line); box-shadow: 0 0 30px rgba(92, 242, 214, .08); transition: border-color .3s, box-shadow .3s; }
+.tutorial.flash { border-color: var(--cyan); box-shadow: 0 0 34px rgba(92, 242, 214, .45); }
+.tutorial .tut-eyebrow { margin: 0 0 6px; color: var(--cyan); font: 600 11px 'Unbounded', sans-serif; letter-spacing: .14em; text-transform: uppercase; }
+.tutorial b { display: block; color: var(--text); font-size: 16px; }
+.tutorial b small { color: var(--gold); font-size: 13px; margin-left: 6px; }
+.tutorial p { margin: 6px 0 8px; color: var(--sub); font-size: 14px; line-height: 1.5; }
+.tutorial .bar { margin: 0 0 8px; }
+.tutorial .bar::after { background: var(--cyan); }
+.tutorial .tut-foot { color: var(--muted); font-size: 12px; }
+
+/* ---- Phone: Guide tab ---- */
+.phone .gold { color: var(--gold); }
+.phone .tutlist { list-style: none; margin: 10px 0; padding: 0; display: grid; gap: 6px; }
+.phone .tutlist li { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--muted); }
+.phone .tutlist li b { font-size: 13px; font-weight: 600; }
+.phone .tutlist li small { color: var(--gold); margin-left: 4px; }
+.phone .tutlist li p { margin: 4px 0 0; color: var(--sub); line-height: 1.45; }
+.phone .tutlist li.ok { color: var(--sub); }
+.phone .tutlist li.ok b { text-decoration: line-through; text-decoration-color: rgba(92, 242, 214, .5); }
+.phone .tutlist li.now b { color: var(--text); }
+.phone .tutlist .tick { flex: none; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; border: 1.5px solid var(--line); color: var(--cyan); font-size: 11px; font-weight: 700; }
+.phone .tutlist li.ok .tick { background: rgba(92, 242, 214, .16); border-color: var(--cyan); }
+.phone .tutlist li.now .tick { border-color: var(--cyan); }
+.phone .btn.ghost { background: none; border: 1.5px solid var(--line); color: var(--sub); }
+.phone details.guide summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; }
+.phone details.guide summary::after { content: '+'; color: var(--cyan); font-weight: 700; }
+.phone details.guide[open] summary::after { content: '−'; }
+.phone details.guide summary::-webkit-details-marker { display: none; }
+.phone details.guide p { line-height: 1.5; }

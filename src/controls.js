@@ -42,8 +42,14 @@ let fromKey = null; // pressed key code -> the default code it stands for (null:
 let unbound = new Set(); // default keys whose action moved elsewhere (so they do nothing now)
 let suspended = false; // while Settings waits for a new key, keys pass through untouched
 
+let active = {}; // the bindings in use now
+
+/** The readable key an action is on right now ("W", "Tab"), for hints and the tutorial. */
+export const keyName = (id) => keyLabel(keyFor(active, ACTIONS.find((a) => a.id === id)));
+
 // bindings: { actionId: code } for the actions the player changed.
 export function setBindings(bindings) {
+  active = { ...bindings };
   fromKey = new Map();
   unbound = new Set();
   for (const a of ACTIONS) {

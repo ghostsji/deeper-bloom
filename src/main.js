@@ -15,6 +15,9 @@ import { ECHO_LINES } from './echo-lines.js';
 import { speakLine, pauseVoice } from './voice.js';
 import { createSettings } from './settings.js';
 import { createMenus } from './menus.js';
+import { createTutorial, STEPS } from './tutorial.js';
+import { setTooltips } from './tooltips.js';
+import { keyName } from './controls.js';
 import { initAudio, updateAudio, setMusic, uiSound, pop, chime, thunk, setPaused, gasp, heartbeat, warn, munch, sizzle, grab, harpoonFire, thud, hiss, bite, release, click } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
@@ -42,6 +45,10 @@ camera.position.set(0, 7, 24);
 
 const world = buildWorld(scene);
 const player = createPlayer(camera, canvas);
+// The tutorial in the corner: steps finish from lifetime stats plus these notes.
+const tutorial = createTutorial(progress.stat);
+let tutorialOn = true;
+const STEP_INDEX = new Map(STEPS.map((st, i) => [st, i])), STEP_TOTAL = STEPS.length;
 const research = createResearch({
   onChange: () => { save(); renderBuildBar(); renderHudData(); },
   onEntry: (sp) => {
@@ -71,7 +78,7 @@ const builder = createBuilder(scene, {
 });
 player.setDeckQuery(builder.deckAt);
 const combat = createCombat(scene, camera, world, {
-  onFire: () => { harpoonFire(); survival.wear('harpoon'); renderGear(); },
+  onFire: () => { harpoonFire(); survival.wear('harpoon'); renderGear(); tutorial.note('fire'); },
   onHit: () => { thud(); progress.track('hits'); },
   onSpot: () => { hiss(); echoSay('eel'); },
   onBite: (dmg) => {
@@ -101,7 +108,11 @@ const settings = createSettings($('settings'), {
     settings.hide();
     if (state === 'paused') $('pause').hidden = false;
   },
-  onControls: (s) => player.setMouse({ sens: s.lookSens, invertY: s.invertY }),
+  onControls: (s) => {
+    player.setMouse({ sens: s.lookSens, invertY: s.invertY });
+    tutorialOn = s.showTutorial !== false;
+    setTooltips(s.showTips !== false);
+  },
   sound: (kind) => uiSound(kind),
 });
 const composer = new EffectComposer(renderer);
@@ -176,7 +187,7 @@ function gather(n, bright) {
 function save() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      lumen, builds: builder.serialize(), research: research.serialize(), survival: survival.serialize(), progress: progress.serialize(),
+      lumen, builds: builder.serialize(), research: research.serialize(), survival: survival.serialize(), progress: progress.serialize(), tutorial: tutorial.serialize(),
       satchel: satchel && { pos: satchel.pos.toArray(), items: satchel.items },
     }));
   } catch { /* not saved */ }
@@ -187,6 +198,7 @@ function load() {
     if (!data) return;
     progress.load(data.progress); // first: skills change costs, bag size and gear
     research.load(data.research); // before builds: build costs depend on it
+    tutorial.load(data.tutorial);
     builder.load(data.builds);
     setLumen(data.lumen || 0);
     renderHudData();
@@ -417,15 +429,25 @@ const phone = createPhone($('phone'), {
   onResearch: (id) => {
     if (!nearStation() || !research.research(id)) return;
     chime();
+    tutorial.note('research');
     toast(`Researched: ${RESEARCH.find((r) => r.id === id).name}`);
   },
   onEat: (id) => eat(id),
   onBuy: (id) => buySkill(id),
+  tutorial,
+  onTutorial: (act) => {
+    if (act === 'skip') tutorial.skip();
+    if (act === 'resume') tutorial.load({ ...tutorial.serialize(), skipped: false });
+    if (act === 'restart') tutorial.restart();
+    lastStep = undefined;
+    save();
+  },
 });
 
 function openPhone(tab) {
   setLens(false);
   if (document.pointerLockElement) document.exitPointerLock();
+  tutorial.note('phone');
   setState('phone');
   phone.show(tab);
 }
@@ -468,6 +490,7 @@ addEventListener('mousedown', (e) => {
     const placed = builder.place();
     if (placed) progress.track('builds');
     if (placed) { thunk(); echoSay(placed === 'station' ? 'station' : 'build'); }
+    if (placed === 'station') tutorial.note('station');
   } else if (combat.equipped) shoot();
   else if (!atSurface()) forage();
 });
@@ -626,6 +649,32 @@ addEventListener('keydown', (e) => {
   }
 });
 
+// ---- Tutorial card ---------------------------------------------------------------
+let lastStep, lastCard = '', flashT = 0;
+addEventListener('mousemove', (e) => { if (state === 'playing' && Math.abs(e.movementX) + Math.abs(e.movementY) > 2) tutorial.note('look'); });
+function updateTutorial() {
+  const step = tutorialOn ? tutorial.current() : null;
+  // A step just finished: tick it off.
+  if (lastStep && step !== lastStep && tutorial.done(lastStep)) {
+    chime();
+    flashT = performance.now();
+    if (!step && tutorial.finished) toast("Tutorial complete. The phone's Guide tab has every how-to.");
+    save();
+  }
+  lastStep = step;
+  const card = $('tutorial');
+  card.hidden = !step;
+  if (!step) return;
+  const pr = tutorial.progress(step);
+  const html = `<p class="tut-eyebrow">Tutorial · ${STEP_INDEX.get(step) + 1} / ${STEP_TOTAL}</p>
+    <b>${step.title}${pr.need > 1 ? ` <small>${Math.floor(pr.have)} / ${pr.need}</small>` : ''}</b>
+    <p>${step.how(keyName)}</p>
+    ${pr.need > 1 ? `<div class="bar" style="--v:${pr.have / pr.need}"></div>` : ''}
+    <small class="tut-foot">${keyName('phone')} → Guide for every how-to, or to skip this</small>`;
+  if (html !== lastCard) { card.innerHTML = html; lastCard = html; }
+  card.classList.toggle('flash', performance.now() - flashT < 900);
+}
+
 // ---- Loop ----------------------------------------------------------------------
 const clock = new THREE.Clock();
 const GARDEN_SECS = 10;
@@ -645,7 +694,9 @@ function frame() {
     }
     world.gather(camera.position, t, gather);
     if (camera.position.distanceTo(world.echo.position) < 7) echoSay('meet');
-    if (atSurface()) echoSay('surface');
+    if (atSurface()) { echoSay('surface'); tutorial.note('surface'); }
+    if (player.onFoot) tutorial.note('deck');
+    updateTutorial();
     updateSubtitle(playTime);
     updateSurvival(dt);
     growFarms(dt);
@@ -687,11 +738,14 @@ function frame() {
 
 
 // ?debug exposes the internals in the console.
-if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, addLumen: (n) => setLumen(lumen + n) } });
+if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, addLumen: (n) => setLumen(lumen + n) } });
 
 renderBuildBar();
 load();
 renderGear();
+// Saves from before the tutorial: count what's already built or researched.
+if (builder.count('station')) tutorial.note('station');
+if (RESEARCH.some((r) => research.isUnlocked(r.id))) tutorial.note('research');
 // Back from loading a slot or starting over: wait on the ready card. Otherwise, the main menu.
 let wasReady = null;
 try { wasReady = sessionStorage.getItem(READY); sessionStorage.removeItem(READY); } catch { /* none */ }

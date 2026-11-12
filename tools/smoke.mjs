@@ -74,8 +74,15 @@ try {
   const dive = await run(`
     document.getElementById('dive').click();
     await new Promise((r) => setTimeout(r, 600));
-    return { hud: !document.getElementById('hud').hidden };`);
+    const card = document.getElementById('tutorial');
+    const first = !card.hidden && card.textContent;
+    dispatchEvent(new MouseEvent('mousemove', { movementX: 40, movementY: 0, clientX: innerWidth / 2, clientY: innerHeight / 2 }));
+    dispatchEvent(new MouseEvent('mousemove', { movementX: -40, movementY: 0, clientX: innerWidth / 2, clientY: innerHeight / 2 })); // face forward again
+    await new Promise((r) => setTimeout(r, 200));
+    return { hud: !document.getElementById('hud').hidden, first, next: card.textContent };`);
   check('New game starts the game', dive.hud);
+  check('the tutorial starts with looking around', /Look around/.test(dive.first || ''));
+  check('looking around moves the tutorial on to swimming', /Swim/.test(dive.next) && !/Look around/.test(dive.next));
 
   const swim = await run(`
     const p0 = db.camera.position.clone();
@@ -95,10 +102,20 @@ try {
       document.querySelector('#phone [data-tab="' + t + '"]').click();
       rendered[t] = document.querySelector('#phone [data-body]').children.length;
     }
+    // Hovering the Bloom chip shows its tooltip.
+    const chip = document.querySelector('#phone [data-bloom]'), r = chip.getBoundingClientRect();
+    chip.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: r.x + 5, clientY: r.y + 5 }));
+    await new Promise((res) => setTimeout(res, 600));
+    const tip = document.querySelector('.tooltip.show')?.textContent || '';
+    const guide = document.querySelector('#phone [data-tab="guide"]');
+    guide.click();
+    const tutList = document.querySelectorAll('#phone .tutlist li').length;
     key('Tab');
     await new Promise((r) => setTimeout(r, 200));
-    return { open: tabs.length, rendered, closed: document.getElementById('phone').classList.contains('up') === false };`);
-  check('the phone opens with all six tabs', phone.open === 6, JSON.stringify(phone.rendered));
+    return { open: tabs.length, rendered, tip, tutList, closed: document.getElementById('phone').classList.contains('up') === false };`);
+  check('the phone opens with all seven tabs', phone.open === 7, JSON.stringify(phone.rendered));
+  check('hovering shows a tooltip', /Bloom points/.test(phone.tip), phone.tip.slice(0, 40));
+  check('the Guide tab lists the tutorial steps', phone.tutList >= 10, `${phone.tutList} steps`);
   check('every phone tab renders', Object.values(phone.rendered).every((n) => n > 0));
   check('Tab puts the phone away', phone.closed);
 
@@ -178,7 +195,7 @@ try {
   check('P opens the pause menu with all its buttons', menus.paused);
   check('Save game saves to a slot', menus.rows === 3 && menus.slot1 && /slot 1/.test(menus.msg), menus.msg);
   check('the slots close back to the pause menu', menus.backToPause);
-  check('Options has four tabs that all render', Object.keys(menus.tabs).length === 4 && Object.values(menus.tabs).every((n) => n > 0), JSON.stringify(menus.tabs));
+  check('Options has four tabs that all render', Object.keys(menus.tabs).length === 4 && Object.values(menus.tabs).every((n) => n > 0) && menus.tabs.display >= 4, JSON.stringify(menus.tabs));
   check('keys can be rebound and reset', menus.rebound === 'I' && menus.reset === 'W', `${menus.rebound} → ${menus.reset}`);
   check('Options goes back to the pause menu', menus.settingsBack);
   check('Main menu goes to the title, now with Continue', menus.title);

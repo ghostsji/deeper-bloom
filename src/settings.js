@@ -9,8 +9,18 @@ import { ACTIONS, keyLabel, keyFor, bind, setBindings, suspendBindings } from '.
 // and key bindings) and Display. Saved per player.
 const KEY = 'deeperbloom-settings';
 const SAMPLE = "This is how I'll sound down here. Take your time. The reef isn't going anywhere.";
-const TABS = [['sound', 'Sound'], ['voice', "Echo's voice"], ['controls', 'Controls'], ['display', 'Display']];
+const TABS = [['sound', 'Sound'], ['voice', "Echo's voice"], ['controls', 'Controls'], ['display', 'Display & help']];
 const CONTROL_DEFAULTS = { lookSens: 1, invertY: false, bindings: {} };
+const HELP_DEFAULTS = { showTutorial: true, showTips: true };
+// Hover help for the settings that aren't self-explanatory.
+const TIPS = {
+  masterVol: 'Everything at once.', musicVol: 'The main menu theme and the reef pad.', sfxVol: 'Bubbles, creatures, the harpoon, the sea.', uiVol: 'Menu hover and click sounds.',
+  rate: 'How fast Echo speaks. Slower is calmer.', pitch: 'Higher or lower than the voice normally speaks.', volume: "Echo's voice only.",
+  gap: 'How long Echo waits between lines, so she never piles tips on you.',
+  roomSize: 'How big the space her voice echoes in sounds.', wet: 'How much of the echo you hear.', damping: 'How quickly the echo softens.',
+  dry: 'How much of her plain voice you hear.', cutoff: 'Lower sounds more muffled and underwater.',
+  lookSens: "How far the view turns when you move the mouse. Doesn't change the turn keys.",
+};
 const DESKTOP = typeof window !== 'undefined' ? window.deeperBloom : null;
 
 const pct = (v) => `${Math.round(v * 100)}%`;
@@ -41,7 +51,7 @@ const applySound = (s) => setVolumes({ master: s.masterVol, music: s.musicVol, s
 export function loadSettings(onControls = () => {}) {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(KEY)) || {}; } catch { /* defaults */ }
-  const s = { ...VOICE_DEFAULTS, ...CONTROL_DEFAULTS, ...saved };
+  const s = { ...VOICE_DEFAULTS, ...CONTROL_DEFAULTS, ...HELP_DEFAULTS, ...saved };
   if (s.source === 'live' && !liveAvailable()) s.source = 'bundled';
   configure(s);
   applySound(s);
@@ -62,7 +72,7 @@ export function createSettings(el, { onBack, onControls = () => {}, sound = () =
   };
   const fmtOf = (k) => SLIDERS.find(([key]) => key === k)[5];
   const row = ([k, label, min, max, step, fmt]) => `
-    <label class="srow"><span>${label}<b data-val="${k}">${fmt(s[k])}</b></span>
+    <label class="srow"${TIPS[k] ? ` data-tip="${TIPS[k]}"` : ''}><span>${label}<b data-val="${k}">${fmt(s[k])}</b></span>
       <input type="range" data-k="${k}" min="${min}" max="${max}" step="${step}" value="${s[k]}"></label>`;
   const rows = (...groups) => SLIDERS.filter((r) => groups.includes(r[6])).map(row).join('');
 
@@ -96,13 +106,16 @@ export function createSettings(el, { onBack, onControls = () => {}, sound = () =
         </div>`;
     },
     controls: () => `${rows('controls')}
-      <label class="scheck"><input type="checkbox" data-invert ${s.invertY ? 'checked' : ''}> Invert mouse Y</label>
+      <label class="scheck" data-tip="Moving the mouse up looks down, like a flight stick."><input type="checkbox" data-invert ${s.invertY ? 'checked' : ''}> Invert mouse Y</label>
       <p class="sgroup">Keys <small>click one, then press the new key (Esc cancels)</small></p>
       <div class="keys">${ACTIONS.map((a) => `<div class="keyrow"><span>${a.label}</span>
-        <button type="button" class="keybtn${waiting === a.id ? ' waiting' : ''}${s.bindings[a.id] ? ' changed' : ''}" data-bind="${a.id}">${waiting === a.id ? 'Press a key…' : keyLabel(keyFor(s.bindings, a))}</button></div>`).join('')}</div>
+        <button type="button" data-tip="Click, then press the new key. If another action has it, they swap." class="keybtn${waiting === a.id ? ' waiting' : ''}${s.bindings[a.id] ? ' changed' : ''}" data-bind="${a.id}">${waiting === a.id ? 'Press a key…' : keyLabel(keyFor(s.bindings, a))}</button></div>`).join('')}</div>
       <div class="sbtns"><button type="button" class="secondary" data-reset="controls">Reset controls</button></div>`,
     display: () => `<label class="scheck"><input type="checkbox" data-fs ${document.fullscreenElement || winFs ? 'checked' : ''}> Fullscreen <small>(F11)</small></label>
-      ${DESKTOP ? `<label class="scheck"><input type="checkbox" data-startfs ${startFs !== false ? 'checked' : ''}> Start the game in fullscreen</label>` : ''}`,
+      ${DESKTOP ? `<label class="scheck"><input type="checkbox" data-startfs ${startFs !== false ? 'checked' : ''}> Start the game in fullscreen</label>` : ''}
+      <p class="sgroup">Help</p>
+      <label class="scheck" data-tip="The task card in the top right, one step at a time. The phone's Guide tab has the full list."><input type="checkbox" data-help="showTutorial" ${s.showTutorial ? 'checked' : ''}> Show the tutorial</label>
+      <label class="scheck" data-tip="Like this one."><input type="checkbox" data-help="showTips" ${s.showTips ? 'checked' : ''}> Show tooltips when hovering</label>`,
   };
   let winFs = false;
 
@@ -162,6 +175,7 @@ export function createSettings(el, { onBack, onControls = () => {}, sound = () =
     const t = e.target;
     if (t.matches('[data-mute]')) { s.muted = t.checked; save(); }
     if (t.matches('[data-invert]')) { s.invertY = t.checked; save(); }
+    if (t.matches('[data-help]')) { s[t.dataset.help] = t.checked; save(); }
     if (t.matches('[data-source]')) {
       const [kind, ...rest] = t.value.split(':'), arg = rest.join(':');
       if (kind === 'pack') { s.source = 'bundled'; s.pack = arg; }

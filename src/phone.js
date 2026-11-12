@@ -1,9 +1,12 @@
 import { SPECIES, RESEARCH } from './research.js';
 import { ITEMS, GEAR, gearMax, bagSize } from './survival.js';
 import * as progress from './progress.js';
+import { STEPS } from './tutorial.js';
+import { keyName } from './controls.js';
 
 // The diver's phone: Deep Bloom's app on a ruggedised handset. Tab brings it up, and the
-// game pauses while it's out. Four tabs: build, research, codex and status.
+// game pauses while it's out. Tabs: build, research, codex, status, goals, skills and a
+// guide (the tutorial checklist and how-tos). Hover almost anything for a tooltip.
 
 const ICONS = {
   build: '<path d="M3 20h18M5 20V10l7-5 7 5v10M9 20v-6h6v6"/>',
@@ -12,8 +15,37 @@ const ICONS = {
   status: '<path d="M3 12h4l2-5 4 10 2-5h6"/>',
   goals: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4"/>',
   skills: '<path d="M12 3v6M12 9l-5 5M12 9l5 5M7 14v5M17 14v5"/><circle cx="12" cy="3" r="1"/>',
+  guide: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/>',
 };
-const TABS = [['build', 'Build'], ['research', 'Research'], ['codex', 'Codex'], ['status', 'Status'], ['goals', 'Goals'], ['skills', 'Skills']];
+const TABS = [['build', 'Build'], ['research', 'Research'], ['codex', 'Codex'], ['status', 'Status'], ['goals', 'Goals'], ['skills', 'Skills'], ['guide', 'Guide']];
+const k = (id) => `<kbd>${keyName(id)}</kbd>`;
+const TAB_TIPS = {
+  build: () => '<b>Build</b><br>Raft pieces, paid for with Lumen. Pick one, then place it from the surface.',
+  research: () => '<b>Research</b><br>Upgrades paid for with Data. Needs you next to a research station.',
+  codex: () => `<b>Codex</b><br>Everything you've scanned with the Echo Lens. ${k('codex')} opens it.`,
+  status: () => '<b>Status</b><br>Health, breath, food, your harpoon and your bag. Eat from here.',
+  goals: () => '<b>Goals</b><br>Endless achievements. Each tier pays Bloom points.',
+  skills: () => '<b>Skills</b><br>Eight skill trees, paid for with Bloom points (never Lumen).',
+  guide: () => '<b>Guide</b><br>The tutorial checklist and how to do everything.',
+};
+const esc = (t) => String(t).replace(/"/g, '&quot;');
+
+// The how-to pages on the Guide tab.
+const GUIDES = [
+  ['Moving around', () => `${k('forward')}${k('left')}${k('back')}${k('right')} swim toward where you look, the mouse looks, ${k('turnLeft')}/${k('turnRight')} turn. ${k('rise')} rises, ${k('sink')} sinks and ${k('dash')} dashes. Swim into a raft to climb onto it; on deck ${k('rise')} jumps. ${k('pause')} or Esc pauses.`],
+  ['Lumen, Data and Bloom', () => '<b class="cyan">Lumen</b> is the reef\'s light: swim through glowing polyps to gather it, and spend it on building. <b class="gold">Data</b> comes from scanning, and pays for research. <b class="cyan">Bloom points</b> come from finishing Goal tiers, and pay for skills. Skills never cost Lumen.'],
+  ['Gathering Lumen', () => 'Glowing polyps on the reef give Lumen when you swim through them, and glow again after a while. Some are rarer (the colour of the message tells you) and pay more. Blighted eels drop Lumen, and coral gardens on your raft grow it slowly.'],
+  ['Scanning and the codex', () => `Hold <kbd>Right mouse</kbd> to raise the Echo Lens, then hold <kbd>Left mouse</kbd> on a creature, coral or plant until the ring fills. Each new scan earns Data and fills in the codex; finishing an entry pays extra. ${k('codex')} opens the codex.`],
+  ['Building', () => `Open the phone (${k('phone')}) → Build and pick a piece. Swim to the surface, aim at the water and <kbd>Left-click</kbd> to place it; <kbd>Right-click</kbd> takes it back for a full refund. The wheel switches pieces and ${k('stopBuilding')} stops building. Most pieces go on a raft deck.`],
+  ['Research', () => `Build a research station and stand next to it, then press ${k('use')} at it or open the phone's Research tab. Research costs Data, and some needs particular codex entries first.`],
+  ['Breath, health and food', () => 'Breath drains underwater and refills at the surface; when it runs out you lose health. Food drains slowly. Health heals only while you\'re fed and have breath. The bars bottom left show all three.'],
+  ['Food and cooking', () => `Underwater, <kbd>Left-click</kbd> a silverfin in front of you (glide in slowly, or it bolts) or the kelp you're aiming at. ${k('eat')} eats. Raw food is better cooked: press ${k('use')} at a cook fire. A kelp farm grows kelp for you; press ${k('use')} to collect it.`],
+  ['The harpoon and eels', () => `${k('harpoon')} raises the harpoon and <kbd>Left-click</kbd> fires; the spear reels back before the next shot. Each shot wears it down; repair it at a workbench with kelp (${k('use')}). Blighted eels guard some kelp patches. Three hits cure one, and it drops Lumen and eel meat. They can't follow you onto a raft.`],
+  ['Goals and skills', () => 'Every goal (Lumen gathered, scans, fish, distance swum...) has endless tiers. Each tier pays Bloom points, which you spend on the Skills tab. Some skills need another one learned first.'],
+  ['Blacking out', () => 'If your health hits zero you black out and wake on your nearest raft. Your bag drops where you fell: swim back to the gold ring to pick it up. Blacking out again before you do loses it.'],
+  ['Saving', () => 'The game saves as you play. Save game (on the pause menu or the main menu) also copies it to one of three slots, and Load game brings one back.'],
+];
+
 const svg = (id) => `<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[id]}</svg>`;
 
 // What each build piece is for, shown on its card.
@@ -33,18 +65,18 @@ const SPECIES_TINT = { polyp: '#5CF2D6', lanternfish: '#FFC46B', jelly: '#FF8FD0
 
 export function createPhone(el, g) {
   // g: { research, survival, builder, costFor, lumen(), nearStation(), placing(), onPick(id),
-  //      onStopBuilding(), onResearch(id), onEat(id), onBuy(skillId), onClose() }
+  //      onStopBuilding(), onResearch(id), onEat(id), onBuy(skillId), tutorial, onTutorial(skip|resume|restart) }
   let tab = 'build';
 
   el.innerHTML = `
     <div class="phone-case">
       <div class="phone-screen">
         <header class="phone-hud">
-          <div><div class="label">Lumen</div><div class="big cyan" data-lumen></div></div>
-          <div class="phone-chips"><span class="chip gold" data-data></span><span class="chip pink" data-bagchip></span><span class="chip cyan" data-bloom></span></div>
+          <div data-tip="<b>Lumen</b><br>The reef's light. Swim through glowing polyps to gather it. Spend it on building."><div class="label">Lumen</div><div class="big cyan" data-lumen></div></div>
+          <div class="phone-chips"><span class="chip gold" data-data data-tip="<b>Data</b><br>Earned by scanning with the Echo Lens. Spend it on research at a research station."></span><span class="chip pink" data-bagchip data-tip="<b>Bag</b><br>The food you carry. The Deep pockets skill adds slots."></span><span class="chip cyan" data-bloom data-tip="<b>Bloom points</b><br>Earned by finishing Goal tiers. Spend them on Skills. Skills never cost Lumen."></span></div>
         </header>
         <section class="phone-body" data-body></section>
-        <nav class="phone-tabs">${TABS.map(([id, name]) => `<button type="button" data-tab="${id}">${svg(id)}${name}</button>`).join('')}</nav>
+        <nav class="phone-tabs">${TABS.map(([id, name]) => `<button type="button" data-tab="${id}" data-tip-tab="${id}">${svg(id)}${name}</button>`).join('')}</nav>
       </div>
     </div>
     <p class="phone-hint">Tab or Esc to put it away</p>`;
@@ -54,7 +86,8 @@ export function createPhone(el, g) {
     const placing = g.placing();
     const cards = g.builder.available().map((p) => {
       const cost = g.costFor(p.id), poor = g.lumen() < cost, on = placing === p.id;
-      return `<button type="button" class="pcard piece${on ? ' on' : ''}${poor ? ' poor' : ''}" data-pick="${p.id}">
+      const tip = poor ? `You need <b>${cost - g.lumen()} more Lumen</b> for this.` : `Costs <b>${cost} Lumen</b>. Click, then aim at the water from the surface and left-click to place.`;
+      return `<button type="button" class="pcard piece${on ? ' on' : ''}${poor ? ' poor' : ''}" data-pick="${p.id}" data-tip="${esc(tip)}">
         <div class="row"><b>${p.name}</b><span class="cost">${cost} Lumen</span></div>
         <p>${PIECE_INFO[p.id] || ''}</p></button>`;
     }).join('');
@@ -71,7 +104,12 @@ export function createPhone(el, g) {
       const needs = r.needs.map((id) => `<span class="chip ${g.research.complete(id) ? 'ok' : 'dim'}">${SPECIES.find((s) => s.id === id).name}</span>`).join('');
       const action = owned ? '<span class="owned">Researched</span>'
         : `<button type="button" class="btn small" data-research="${r.id}" ${at && g.research.canResearch(r.id) ? '' : 'disabled'}>Research · ${r.cost} Data</button>`;
-      return `<div class="pcard${owned ? ' done' : ''}"><div class="row"><b>${r.name}</b></div><p>${r.desc}</p><div class="needs">${needs}</div>${action}</div>`;
+      const why = owned ? 'Already researched.' : [
+        ...r.needs.filter((id) => !g.research.complete(id)).map((id) => `Complete the ${SPECIES.find((s) => s.id === id).name} codex entry (scan more of them).`),
+        ...(g.research.data < r.cost ? [`Earn ${r.cost - g.research.data} more Data by scanning.`] : []),
+        ...(at ? [] : ['Stand next to a research station.']),
+      ].join('<br>') || `Ready: costs <b>${r.cost} Data</b>.`;
+      return `<div class="pcard${owned ? ' done' : ''}" data-tip="${esc(why)}"><div class="row"><b>${r.name}</b></div><p>${r.desc}</p><div class="needs">${needs}</div>${action}</div>`;
     }).join('');
     return `<div class="label pad">Research</div>
       ${at ? '<p class="sub cyan">Linked to your research station.</p>' : '<p class="note">Not linked. Stand next to a research station on your raft to research.</p>'}
@@ -82,7 +120,8 @@ export function createPhone(el, g) {
     const done = SPECIES.filter((s) => g.research.complete(s.id)).length;
     const grid = SPECIES.map((s) => {
       const n = g.research.counts[s.id] || 0;
-      return `<div class="cchip${n ? '' : ' dim'}"><i style="background:${n ? SPECIES_TINT[s.id] : 'var(--track)'}"></i><b>${n ? s.name : '???'}</b><span>${n}/${s.need}</span></div>`;
+      const tip = n ? `${s.name}: ${n} of ${s.need} scans${n >= s.need ? ' (complete)' : ''}.` : 'Not found yet. Find it and scan it with the Echo Lens.';
+      return `<div class="cchip${n ? '' : ' dim'}" data-tip="${esc(tip)}"><i style="background:${n ? SPECIES_TINT[s.id] : 'var(--track)'}"></i><b>${n ? s.name : '???'}</b><span>${n}/${s.need}</span></div>`;
     }).join('');
     const entries = SPECIES.filter((s) => g.research.counts[s.id]).map((s) => {
       const full = g.research.complete(s.id);
@@ -100,10 +139,15 @@ export function createPhone(el, g) {
 
   function renderStatus() {
     const s = g.survival.stats, bag = g.survival.bag;
-    const meter = (name, v, cls) => `<div class="meter"><div class="row"><span class="label">${name}</span><b>${Math.round(v)}</b></div><div class="bar"><div class="fill ${cls}" style="width:${v}%"></div></div></div>`;
+    const TIPS = {
+      Health: 'Heals slowly while you\'re fed and have breath. At zero you black out and drop your bag.',
+      Breath: 'Drains underwater and refills at the surface. When it runs out you start losing health.',
+      Food: `Drains over time. Eat (${k('eat')}) to keep it up; your health only heals while you're fed.`,
+    };
+    const meter = (name, v, cls) => `<div class="meter" data-tip="${esc(TIPS[name] || `Shots left before it breaks. Repair it at a workbench with ${GEAR.harpoon.repair} kelp.`)}"><div class="row"><span class="label">${name}</span><b>${Math.round(v)}</b></div><div class="bar"><div class="fill ${cls}" style="width:${v}%"></div></div></div>`;
     const items = Object.keys(ITEMS).filter((k) => bag[k]).map((k) => {
       const it = ITEMS[k];
-      return `<div class="pcard"><div class="row"><b>${it.name} <span class="muted">×${bag[k]}</span></b>
+      return `<div class="pcard" data-tip="${esc(`${it.name}: +${it.food} food${it.health ? `, ${it.health > 0 ? '+' : ''}${it.health} health` : ''}.${it.health < 0 ? ' Cook it at a cook fire first.' : ''}`)}"><div class="row"><b>${it.name} <span class="muted">×${bag[k]}</span></b>
         <button type="button" class="btn small" data-eat="${k}">Eat</button></div>
         <p>+${it.food} food${it.health ? `, ${it.health > 0 ? '+' : ''}${it.health} health` : ''}</p></div>`;
     }).join('');
@@ -119,7 +163,7 @@ export function createPhone(el, g) {
   // Endless achievements: each line's next tier, how close you are, and what it pays.
   function renderGoals() {
     const p = progress.snapshot();
-    const cards = p.achievements.map((a) => `<div class="pcard${a.tier ? ' done' : ''}">
+    const cards = p.achievements.map((a) => `<div class="pcard${a.tier ? ' done' : ''}" data-tip="${esc(`Next tier at <b>${a.goal}</b>. It pays <b>${a.reward} Bloom points</b> to spend on Skills.`)}">
         <div class="row"><b>${a.name}</b><span class="small gold">+${a.reward} Bloom</span></div>
         <p>${a.desc}</p>
         <div class="bar"><div class="fill" style="width:${a.progress * 100}%"></div></div>
@@ -130,11 +174,39 @@ export function createPhone(el, g) {
       <div class="plist">${cards}</div>`;
   }
 
+  function skillTip(n, pts) {
+    if (n.rank >= n.max) return 'Mastered: every rank learned.';
+    if (!n.unlocked) return `Learn ${n.requires.join(' and ')} first.`;
+    if (pts < n.cost) return `Needs <b>${n.cost} Bloom points</b>; you have ${pts}. Finish Goal tiers to earn more.`;
+    return `Spends <b>${n.cost} Bloom points</b> (not Lumen). Each rank costs a little more.`;
+  }
+
+  // The tutorial checklist and the how-to pages.
+  function renderGuide() {
+    const t = g.tutorial, cur = t.current();
+    const done = STEPS.filter((s) => t.done(s)).length;
+    const steps = STEPS.map((s) => {
+      const ok = t.done(s), now = s === cur, pr = t.progress(s);
+      return `<li class="${ok ? 'ok' : now ? 'now' : ''}"><span class="tick">${ok ? '✓' : now ? '›' : ''}</span><div><b>${s.title}${!ok && pr.need > 1 ? ` <small>${Math.floor(pr.have)} / ${pr.need}</small>` : ''}</b>${now ? `<p>${s.how(keyName)}</p>` : ''}</div></li>`;
+    }).join('');
+    const ctl = t.skipped ? '<button type="button" class="btn small" data-tut="resume">Show the tutorial again</button>'
+      : t.finished ? '<button type="button" class="btn small" data-tut="restart">Start the tutorial again</button>'
+      : '<button type="button" class="btn small ghost" data-tut="skip">Skip the tutorial</button>';
+    return `<div class="collection">
+        <div class="row"><span class="label">Tutorial</span><span class="small muted">${done} / ${STEPS.length} done</span></div>
+        <div class="bar"><div class="fill" style="width:${(done / STEPS.length) * 100}%"></div></div>
+        <ol class="tutlist">${steps}</ol>
+        <div class="row">${ctl}</div>
+      </div>
+      <div class="label pad">How to</div>
+      <div class="plist">${GUIDES.map(([title, text], i) => `<details class="pcard guide"${i === 1 ? ' open' : ''}><summary><b>${title}</b></summary><p>${text()}</p></details>`).join('')}</div>`;
+  }
+
   // Skill trees bought with Bloom points.
   function renderSkills() {
     const p = progress.snapshot();
     const trees = p.trees.map((t) => `<div class="label pad">${t.name}</div>
-      <div class="plist">${t.nodes.map((n) => `<div class="pcard${n.rank ? ' done' : ''}${n.unlocked ? '' : ' locked'}">
+      <div class="plist">${t.nodes.map((n) => `<div class="pcard${n.rank ? ' done' : ''}${n.unlocked ? '' : ' locked'}" data-tip="${esc(skillTip(n, p.points))}">
           <div class="row"><b>${n.name}</b><span class="small ${n.rank ? 'cyan' : 'muted'}">${n.rank} / ${n.max}</span></div>
           <p>${n.desc}</p>
           ${n.requires.length ? `<div class="needs">${n.requires.map((r) => `<span class="chip ${n.unlocked ? 'ok' : 'dim'}">Needs ${r}</span>`).join('')}</div>` : ''}
@@ -144,14 +216,14 @@ export function createPhone(el, g) {
     return `<div class="note">${p.points} Bloom points to spend. Earn more from Goals.</div>${trees}`;
   }
 
-  const RENDER = { build: renderBuild, research: renderResearch, codex: renderCodex, status: renderStatus, goals: renderGoals, skills: renderSkills };
+  const RENDER = { build: renderBuild, research: renderResearch, codex: renderCodex, status: renderStatus, goals: renderGoals, skills: renderSkills, guide: renderGuide };
 
   function render() {
     el.querySelector('[data-lumen]').textContent = g.lumen().toLocaleString();
     el.querySelector('[data-data]').textContent = `${g.research.data} Data`;
     el.querySelector('[data-bloom]').textContent = `${progress.points()} Bloom`;
     el.querySelector('[data-bagchip]').textContent = `Bag ${g.survival.bagCount}/${bagSize()}`;
-    el.querySelectorAll('[data-tab]').forEach((b) => b.toggleAttribute('aria-current', b.dataset.tab === tab));
+    el.querySelectorAll('[data-tab]').forEach((b) => { b.toggleAttribute('aria-current', b.dataset.tab === tab); b.dataset.tip = TAB_TIPS[b.dataset.tab](); });
     const scroll = body.scrollTop;
     body.innerHTML = RENDER[tab]();
     body.scrollTop = scroll;
@@ -166,6 +238,7 @@ export function createPhone(el, g) {
     if (b.dataset.research) { g.onResearch(b.dataset.research); render(); return; }
     if (b.dataset.eat) { g.onEat(b.dataset.eat); render(); }
     if (b.dataset.buy) { g.onBuy(b.dataset.buy); render(); }
+    if (b.dataset.tut) { g.onTutorial(b.dataset.tut); render(); }
   });
 
   return {

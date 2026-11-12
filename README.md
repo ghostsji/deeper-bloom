@@ -32,6 +32,10 @@ npm run verify
 Main menu: Continue (your last game), New game (asks first if it would replace one), Load game, Save game, Options, Exit. Save slots (three) are files in the app's user data folder (`saves/slot1.json`...; in a browser, localStorage). Pause (Esc or P): Resume, Save game, Options, Main menu, Quit to desktop. Loading or starting over lands on a "Ready to dive" card, since the mouse can only be captured after a click.
 Options has four tabs: Sound, Echo's voice, Controls (look sensitivity, invert mouse Y, every key rebindable, swapping when a key is taken) and Display (fullscreen, start in fullscreen). Menu buttons have hover and click sounds, and the main menu has its own music.
 
+## Help
+
+A tutorial card (top right) walks through 14 tasks one at a time: look, swim, gather Lumen, open the phone, scan, surface, build a raft, climb aboard, find food, eat, build a research station, research, use the harpoon and learn a skill. Each shows how, with your current key bindings, and ticks off when you've done it (things already done are skipped). The phone's **Guide** tab has the checklist, Skip / Start again, and how-to pages for everything. Hover almost anything on the phone, menus or Options for a tooltip. Both can be turned off in Options → Display & help. Steps live in `src/tutorial.js`, tooltips in `src/tooltips.js` (any element with `data-tip`).
+
 ## Controls
 
 WASD swim (toward where you look) · mouse look · Space rise (jump on a raft) · Ctrl or C sink · Q/E turn · Shift dash · 1 harpoon · Tab phone · hold right mouse Echo Lens · F use · R eat · X stop building · Esc or P pause.
