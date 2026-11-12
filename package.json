@@ -6,7 +6,11 @@
   "scripts": {
     "start": "python -m http.server 5174",
     "desktop": "electron .",
-    "voices": "node tools/make-voices.mjs"
+    "voices": "node tools/make-voices.mjs",
+    "check": "node tools/check.mjs",
+    "test": "node --test test/*.test.js",
+    "smoke": "node tools/smoke.mjs",
+    "verify": "node tools/check.mjs && node --test test/*.test.js && node tools/smoke.mjs"
   },
   "dependencies": {
     "msedge-tts": "2.1.0",
@@ -15,5 +19,6 @@
   "devDependencies": {
     "electron": "^45.1.0"
   },
-  "main": "electron/main.cjs"
+  "main": "electron/main.cjs",
+  "type": "module"
 }

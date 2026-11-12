@@ -8,6 +8,15 @@ const { createTTS } = require('./tts.cjs');
 const ROOT = path.join(__dirname, '..');
 
 // ES modules don't load from file://, so the game is served from app://game/ instead.
+// DEEPER_BLOOM_USER_DATA=<folder> keeps saves and caches there instead (the smoke test uses a
+// throwaway folder so it never touches your own save).
+if (process.env.DEEPER_BLOOM_USER_DATA) app.setPath('userData', process.env.DEEPER_BLOOM_USER_DATA);
+
+// Test mode (DEEPER_BLOOM_HEADLESS): keep the off-screen window running at full speed.
+if (process.env.DEEPER_BLOOM_HEADLESS) {
+  for (const sw of ['disable-renderer-backgrounding', 'disable-backgrounding-occluded-windows', 'disable-background-timer-throttling']) app.commandLine.appendSwitch(sw);
+}
+
 // Let the main menu's music start without waiting for a click.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
@@ -16,13 +25,14 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 function createWindow() {
-  // DEEPER_BLOOM_HEADLESS=1 runs in a hidden window for automated testing.
+  // DEEPER_BLOOM_HEADLESS=1 is for automated testing: the window is shown (hidden windows
+  // barely run the game loop) but placed far off-screen and kept off the taskbar.
   const headless = !!process.env.DEEPER_BLOOM_HEADLESS;
   const win = new BrowserWindow({
     fullscreen: !headless,
-    show: !headless,
-    width: 1600,
-    height: 900,
+    width: 1280,
+    height: 720,
+    ...(headless ? { x: -32000, y: -32000, skipTaskbar: true, focusable: false } : {}),
     backgroundColor: '#03111A',
     title: 'Deeper Bloom',
     autoHideMenuBar: true,

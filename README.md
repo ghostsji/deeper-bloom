@@ -15,6 +15,18 @@ Flutter shell: `../deeper_bloom_shell` hosts this same game in a Flutter Windows
 
 Or in a browser: open http://localhost:5174 and click **Dive** (it needs a local server because it uses ES modules). Add `?debug` to expose `db` (renderer, scene, camera, world) in the console.
 
+## Checks
+
+Run these before committing (from PowerShell or cmd):
+
+```bash
+npm run verify
+```
+
+- `npm run check`: parses every game, Electron and tool file the way the browser and Electron will (catches syntax slips that would break the game at startup).
+- `npm test`: unit tests for progression and survival (`test/*.test.js`, Node's built-in test runner).
+- `npm run smoke`: boots the real game in an off-screen Electron window with a throwaway profile (your save is never touched), then dives, swims, opens every phone tab, scans, climbs a raft, earns goals, learns a skill and saves. Fails on any page error.
+
 ## Controls
 
 WASD swim (toward where you look) · mouse look · Space rise (jump on a raft) · Ctrl or C sink · Q/E turn · Shift dash · 1 harpoon · Tab phone · hold right mouse Echo Lens · F use · R eat · X stop building · Esc or P pause.
