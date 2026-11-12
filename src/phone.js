@@ -3,6 +3,8 @@ import { ITEMS, GEAR, gearMax, bagSize } from './survival.js';
 import * as progress from './progress.js';
 import { STEPS } from './tutorial.js';
 import { keyName } from './controls.js';
+import { SYSTEMS } from './hud-systems.js';
+import { crackSvg } from './hud-fx.js';
 
 // The diver's phone: Deep Bloom's app on a ruggedised handset. Tab brings it up, and the
 // game pauses while it's out. Tabs: build, research, codex, status, goals, skills and a
@@ -23,7 +25,7 @@ const TAB_TIPS = {
   build: () => '<b>Build</b><br>Raft pieces, paid for with Lumen. Pick one, then place it from the surface.',
   research: () => '<b>Research</b><br>Upgrades paid for with Data. Needs you next to a research station.',
   codex: () => `<b>Codex</b><br>Everything you've scanned with the Echo Lens. ${k('codex')} opens it.`,
-  status: () => '<b>Status</b><br>Health, breath, food, your harpoon and your bag. Eat from here.',
+  status: () => '<b>Status</b><br>Visor systems, health, breath, food, your harpoon and your bag. Eat from here.',
   goals: () => '<b>Goals</b><br>Endless achievements. Each tier pays Bloom points.',
   skills: () => '<b>Skills</b><br>Eight skill trees, paid for with Bloom points (never Lumen).',
   guide: () => '<b>Guide</b><br>The tutorial checklist and how to do everything.',
@@ -65,12 +67,13 @@ const SPECIES_TINT = { polyp: '#5CF2D6', lanternfish: '#FFC46B', jelly: '#FF8FD0
 
 export function createPhone(el, g) {
   // g: { research, survival, builder, costFor, lumen(), nearStation(), placing(), onPick(id),
-  //      onStopBuilding(), onResearch(id), onEat(id), onBuy(skillId), tutorial, onTutorial(skip|resume|restart) }
+  //      onStopBuilding(), onResearch(id), onEat(id), onBuy(skillId), tutorial, systems, onTutorial(skip|resume|restart) }
   let tab = 'build';
 
   el.innerHTML = `
     <div class="phone-case">
       <div class="phone-screen">
+        <div class="phone-cracks">${crackSvg(400, 780, 3)}</div>
         <header class="phone-hud">
           <div data-tip="<b>Lumen</b><br>The reef's light. Swim through glowing polyps to gather it. Spend it on building."><div class="label">Lumen</div><div class="big cyan" data-lumen></div></div>
           <div class="phone-chips"><span class="chip gold" data-data data-tip="<b>Data</b><br>Earned by scanning with the Echo Lens. Spend it on research at a research station."></span><span class="chip pink" data-bagchip data-tip="<b>Bag</b><br>The food you carry. The Deep pockets skill adds slots."></span><span class="chip cyan" data-bloom data-tip="<b>Bloom points</b><br>Earned by finishing Goal tiers. Spend them on Skills. Skills never cost Lumen."></span></div>
@@ -151,7 +154,19 @@ export function createPhone(el, g) {
         <button type="button" class="btn small" data-eat="${k}">Eat</button></div>
         <p>+${it.food} food${it.health ? `, ${it.health > 0 ? '+' : ''}${it.health} health` : ''}</p></div>`;
     }).join('');
-    return `<div class="label pad">Status</div>
+    const sys = g.systems, pct = Math.round(sys.integrity * 100);
+    const sysRows = SYSTEMS.map((x) => {
+      const on = sys.online(x.id), pr = sys.progress(x);
+      return `<li class="${on ? 'ok' : ''}" data-tip="${esc(on ? `${x.name}: back online.` : `<b>${x.name}</b>: damaged. ${x.fault}.<br>Fix: ${x.how}.`)}">
+        <span class="tick">${on ? '✓' : '!'}</span><div><b>${x.name}</b>
+        <p>${on ? 'Online' : `${x.how}${pr.need > 1 ? ` <small>${pr.have} / ${pr.need}</small>` : ''}`}</p></div></li>`;
+    }).join('');
+    return `<div class="collection systems" data-tip="The flood damaged your visor. Each system comes back online when you reach its milestone.">
+        <div class="row"><span class="label">Visor systems</span><span class="small ${pct === 100 ? 'cyan' : 'gold'}">${pct}% restored</span></div>
+        <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
+        <ol class="tutlist">${sysRows}</ol>
+      </div>
+      <div class="label pad">Status</div>
       ${meter('Health', s.health, 'pink-bg')}${meter('Breath', s.breath, 'cyan-bg')}${meter('Food', s.food, 'gold-bg')}
       <div class="label pad">Gear</div>
       ${meter(`Harpoon ${g.survival.gear.harpoon <= 0 ? '(broken)' : ''}`, (g.survival.gear.harpoon / gearMax('harpoon')) * 100, '')}
@@ -219,6 +234,7 @@ export function createPhone(el, g) {
   const RENDER = { build: renderBuild, research: renderResearch, codex: renderCodex, status: renderStatus, goals: renderGoals, skills: renderSkills, guide: renderGuide };
 
   function render() {
+    el.style.setProperty('--crack', g.systems.online('visor') ? 0 : Math.max(0.15, 0.6 - g.systems.integrity * 0.5));
     el.querySelector('[data-lumen]').textContent = g.lumen().toLocaleString();
     el.querySelector('[data-data]').textContent = `${g.research.data} Data`;
     el.querySelector('[data-bloom]').textContent = `${progress.points()} Bloom`;

@@ -16,6 +16,8 @@ import { speakLine, pauseVoice } from './voice.js';
 import { createSettings } from './settings.js';
 import { createMenus } from './menus.js';
 import { createTutorial, STEPS } from './tutorial.js';
+import { createSystems } from './hud-systems.js';
+import { createHudFx } from './hud-fx.js';
 import { setTooltips } from './tooltips.js';
 import { keyName } from './controls.js';
 import { initAudio, updateAudio, setMusic, uiSound, pop, chime, thunk, setPaused, gasp, heartbeat, warn, munch, sizzle, grab, harpoonFire, thud, hiss, bite, release, click } from './audio.js';
@@ -58,6 +60,14 @@ const research = createResearch({
     echoSay('firstEntry');
   },
 });
+// The flood-damaged visor HUD: systems come back online as you make progress.
+const systems = createSystems({
+  stat: progress.stat,
+  codex: (id) => research.counts[id] || 0,
+  stations: () => builder.count('station'),
+  researched: () => RESEARCH.filter((r) => research.isUnlocked(r.id)).length,
+});
+const hudFx = createHudFx(document.body, systems);
 const survival = createSurvival({
   onBlackout: blackout,
   onChange: () => { renderBag(); save(); },
@@ -145,7 +155,7 @@ function updateSubtitle(t) {
   if (t < lineUntil) return;
   const next = queue.shift();
   if (next) {
-    $('subtitle').innerHTML = `<b>ECHO</b>${next.text}`;
+    hudFx.text($('subtitle'), next.text, 'comms', '<b>ECHO</b>');
     $('subtitle').classList.add('show');
     lineUntil = t + 3 + next.text.length * 0.06 + settings.gap; // reading time
     chime();
@@ -163,7 +173,7 @@ let playTime = 0;
 
 function setLumen(n) {
   lumen = n;
-  $('lumen').textContent = lumen.toLocaleString();
+  hudFx.text($('lumen'), lumen.toLocaleString(), 'ledger');
   world.setBloom(Math.min(1, lumen / BLOOM_FULL));
   renderBuildBar();
   if (phone?.open) phone.render();
@@ -187,7 +197,7 @@ function gather(n, bright) {
 function save() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      lumen, builds: builder.serialize(), research: research.serialize(), survival: survival.serialize(), progress: progress.serialize(), tutorial: tutorial.serialize(),
+      lumen, builds: builder.serialize(), research: research.serialize(), survival: survival.serialize(), progress: progress.serialize(), tutorial: tutorial.serialize(), systems: systems.serialize(),
       satchel: satchel && { pos: satchel.pos.toArray(), items: satchel.items },
     }));
   } catch { /* not saved */ }
@@ -199,6 +209,7 @@ function load() {
     progress.load(data.progress); // first: skills change costs, bag size and gear
     research.load(data.research); // before builds: build costs depend on it
     tutorial.load(data.tutorial);
+    systems.load(data.systems);
     builder.load(data.builds);
     setLumen(data.lumen || 0);
     renderHudData();
@@ -221,7 +232,7 @@ function toast(text, tint = null) {
   toastTimer = setTimeout(() => $('toast').classList.remove('show'), 3500);
 }
 function renderHudData() {
-  $('data').textContent = research.data.toLocaleString();
+  hudFx.text($('data'), research.data.toLocaleString(), 'ledger');
 }
 
 // ---- Achievements and skills ----------------------------------------------------
@@ -435,6 +446,7 @@ const phone = createPhone($('phone'), {
   onEat: (id) => eat(id),
   onBuy: (id) => buySkill(id),
   tutorial,
+  systems,
   onTutorial: (act) => {
     if (act === 'skip') tutorial.skip();
     if (act === 'resume') tutorial.load({ ...tutorial.serialize(), skipped: false });
@@ -675,6 +687,31 @@ function updateTutorial() {
   card.classList.toggle('flash', performance.now() - flashT < 900);
 }
 
+// ---- Visor HUD ------------------------------------------------------------------
+const _dir = new THREE.Vector3();
+let sysClock = 0;
+function updateVisor(dt) {
+  // Restore systems whose milestones you've reached (checked a few times a second).
+  if ((sysClock -= dt) <= 0 && state === 'playing') {
+    sysClock = 0.3;
+    for (const s of systems.update()) {
+      hudFx.restore(s);
+      toast(`System restored: ${s.name}`, { color: '#5CF2D6' });
+      chime();
+      save();
+    }
+  }
+  camera.getWorldDirection(_dir);
+  const p = camera.position;
+  const point = (kind, at) => ({ kind, bearing: Math.atan2(at.x - p.x, -(at.z - p.z)), dist: Math.hypot(at.x - p.x, at.z - p.z) });
+  const points = [point('echo', world.echo.position)];
+  const deck = builder.deckNear(p);
+  if (deck) points.push(point('raft', deck));
+  if (satchel) points.push(point('satchel', satchel.pos));
+  if (systems.online('sensor')) for (const e of combat.eelPositions()) if (e.distanceTo(p) < 45) points.push({ ...point('eel', e), dist: null });
+  hudFx.update(dt, t, { heading: Math.atan2(_dir.x, -_dir.z), points, playing: state === 'playing' });
+}
+
 // ---- Loop ----------------------------------------------------------------------
 const clock = new THREE.Clock();
 const GARDEN_SECS = 10;
@@ -723,14 +760,15 @@ function frame() {
   $('scanlabel').hidden = !scan;
   $('scanring').style.setProperty('--p', scan ? scan.progress : 0);
   if (scan) {
-    $('scanlabel').innerHTML = `<b>${scan.name}</b>${scan.status}`;
+    hudFx.text($('scanlabel'), scan.status, 'lens', `<b>${scan.name}</b>`);
     $('scanlabel').classList.toggle('known', scan.done);
   }
   const near = state === 'playing' && !lensOn ? usable() : null;
   $('prompt').hidden = !near;
   if (near) $('prompt').innerHTML = `<kbd>F</kbd>${USE_LABEL[near.id]}${near.id === 'kelpfarm' ? ` (${near.state?.kelp || 0})` : ''}`;
   const depth = Math.max(0, SURFACE_Y - camera.position.y);
-  $('depth').textContent = player.onFoot ? 'On deck' : depth < 0.3 ? 'Surface' : `${depth.toFixed(1)} m`;
+  hudFx.text($('depth'), player.onFoot ? 'On deck' : depth < 0.3 ? 'Surface' : `${depth.toFixed(1)} m`, 'depth');
+  updateVisor(dt);
   updateAudio(depth, camera.position.y > SURFACE_Y || state === 'title'); // menus aren't muffled
   composer.render();
   requestAnimationFrame(frame);
@@ -738,11 +776,14 @@ function frame() {
 
 
 // ?debug exposes the internals in the console.
-if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, addLumen: (n) => setLumen(lumen + n) } });
+if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, systems, hudFx, addLumen: (n) => setLumen(lumen + n) } });
 
 renderBuildBar();
 load();
 renderGear();
+// Saves from before the visor HUD: systems you've already earned come back quietly.
+systems.update();
+hudFx.refresh();
 // Saves from before the tutorial: count what's already built or researched.
 if (builder.count('station')) tutorial.note('station');
 if (RESEARCH.some((r) => research.isUnlocked(r.id))) tutorial.note('research');

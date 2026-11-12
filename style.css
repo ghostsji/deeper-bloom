@@ -273,3 +273,109 @@ kbd { display: inline-block; min-width: 1em; margin: 0 1px; padding: 0 6px; bord
 .phone details.guide[open] summary::after { content: '−'; }
 .phone details.guide summary::-webkit-details-marker { display: none; }
 .phone details.guide p { line-height: 1.5; }
+
+/* =====================================================================
+   Visor HUD: a futuristic dive visor the flood left damaged.
+   .dmg = that system is still broken, .glitch = a glitch burst right now,
+   .boot = just restored (reboot flicker). See src/hud-fx.js.
+   ===================================================================== */
+:root { --mono: 'Share Tech Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace; --hud-line: rgba(92, 242, 214, .38); }
+
+/* The glass: corner brackets, scanlines, cracks, static. */
+.visor { position: absolute; inset: 0; --crack: .7; }
+.visor .v-scan { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(92, 242, 214, .035) 0 1px, transparent 1px 3px); mix-blend-mode: screen; }
+.visor::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 75% 70% at 50% 50%, transparent 62%, rgba(92, 242, 214, .06) 82%, rgba(2, 12, 18, .55) 100%); }
+.visor .v-cracks { position: absolute; inset: 0; opacity: var(--crack); transition: opacity 2.5s; filter: drop-shadow(0 0 2px rgba(220, 255, 250, .35)); }
+.visor .v-cracks svg { width: 100%; height: 100%; }
+.visor .v-static { position: absolute; inset: 0; opacity: 0; background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, .08) 0 2px, transparent 2px 5px),
+    repeating-linear-gradient(90deg, rgba(92, 242, 214, .05) 0 1px, transparent 1px 7px); }
+.visor.fuzz .v-static { opacity: 1; animation: vfuzz .09s steps(2) infinite; }
+.visor.fuzz ~ * { filter: hue-rotate(25deg) saturate(1.4); }
+@keyframes vfuzz { 50% { transform: translate(3px, -2px); } }
+.visor .v-corner { position: absolute; width: 42px; height: 42px; border: 2px solid var(--hud-line); }
+.visor .v-corner.tl { top: 12px; left: 12px; border-right: 0; border-bottom: 0; }
+.visor .v-corner.tr { top: 12px; right: 12px; border-left: 0; border-bottom: 0; }
+.visor .v-corner.bl { bottom: 12px; left: 12px; border-right: 0; border-top: 0; }
+.visor .v-corner.br { bottom: 12px; right: 12px; border-left: 0; border-top: 0; }
+.visor .v-flash { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, rgba(92, 242, 214, .0) 30%, rgba(92, 242, 214, .35) 100%); }
+.visor .v-flash.on { animation: vflash 1.2s ease-out; }
+@keyframes vflash { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+/* Readouts: angled panels with a lit edge, mono labels. */
+.lumen, .datacount { padding: 6px 16px 6px 12px; background: linear-gradient(90deg, rgba(3, 17, 26, .7), rgba(3, 17, 26, .15)); border-left: 2px solid var(--cyan);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%); }
+.lumen { top: 30px; left: 34px; }
+.datacount { top: 78px; left: 34px; border-left-color: var(--gold); }
+.lumen small, .datacount small { font-family: var(--mono); letter-spacing: .18em; }
+.depthbox { position: absolute; top: 30px; right: 34px; text-align: right; padding: 4px 12px 6px 18px; border-right: 2px solid var(--cyan); background: linear-gradient(270deg, rgba(3, 17, 26, .7), rgba(3, 17, 26, .15));
+  clip-path: polygon(12px 0, 100% 0, 100% 100%, 0 100%); }
+.depthbox small { display: block; font: 11px var(--mono); letter-spacing: .22em; text-transform: uppercase; color: var(--muted); }
+.depthbox .depth { position: static; font: 600 20px 'Unbounded', sans-serif; color: var(--text); text-shadow: 0 0 12px rgba(92, 242, 214, .45); }
+.tutorial { top: 104px; right: 34px; border-radius: 4px; clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px)); border-color: var(--hud-line); }
+.toast { top: 72px; border-radius: 4px; }
+.stats { left: 34px; bottom: 34px; width: 240px; padding: 10px 12px 12px; background: rgba(3, 17, 26, .55); border: 1px solid var(--hud-line); border-radius: 2px;
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%); }
+.stat { font-family: var(--mono); letter-spacing: .14em; }
+.integrity { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; margin-bottom: 4px; padding-bottom: 7px; border-bottom: 1px dashed var(--hud-line); font: 11px var(--mono); letter-spacing: .16em; color: var(--gold); }
+.integrity i { height: 4px; background: linear-gradient(90deg, var(--gold) calc(var(--v) * 100%), rgba(255, 196, 107, .15) 0); }
+.integrity b { font-weight: 400; color: var(--text); }
+.integrity.full { color: var(--cyan); }
+.integrity.full i { background: var(--cyan); }
+.subtitle { border-radius: 2px; border-left: 3px solid var(--cyan); background: linear-gradient(90deg, rgba(3, 17, 26, .78), rgba(3, 17, 26, .5));
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%); }
+.subtitle b { font-family: var(--mono); color: var(--cyan); letter-spacing: .2em; }
+.hint, .lenshint { font-family: var(--mono); letter-spacing: .08em; }
+.crosshair { width: 4px; height: 4px; margin: -2px 0 0 -2px; }
+.crosshair::before { content: ''; position: absolute; left: -12px; top: -12px; width: 28px; height: 28px;
+  background: linear-gradient(var(--hud-line), var(--hud-line)) 0 0 / 7px 1px no-repeat, linear-gradient(var(--hud-line), var(--hud-line)) 0 0 / 1px 7px no-repeat,
+    linear-gradient(var(--hud-line), var(--hud-line)) 100% 100% / 7px 1px no-repeat, linear-gradient(var(--hud-line), var(--hud-line)) 100% 100% / 1px 7px no-repeat; }
+
+/* Compass strip (Navigation). */
+.compass { position: absolute; top: 18px; left: 50%; width: min(520px, 50vw); height: 38px; transform: translateX(-50%); overflow: hidden;
+  background: linear-gradient(90deg, transparent, rgba(3, 17, 26, .6) 15%, rgba(3, 17, 26, .6) 85%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); }
+.compass .cmp-ticks { position: absolute; left: 0; right: 0; bottom: 0; height: 7px; background: linear-gradient(90deg, var(--hud-line) 1px, transparent 1px) 0 0 / 12.5% 100% repeat-x; }
+.compass .cmp-labels span, .compass .mark { position: absolute; left: 0; top: 4px; white-space: nowrap; }
+.compass .cmp-labels span { font: 11px var(--mono); color: var(--muted); letter-spacing: .1em; }
+.compass .cmp-labels span.major { font: 600 13px 'Unbounded', sans-serif; color: var(--text); top: 2px; }
+.compass .cmp-needle { position: absolute; left: 50%; bottom: 0; width: 2px; height: 12px; margin-left: -1px; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+.compass .mark { top: 20px; width: 8px; height: 8px; }
+.compass .mark::after { content: attr(data-dist); position: absolute; left: 12px; top: -3px; font: 10px var(--mono); color: var(--sub); }
+.compass .mark.echo { border-radius: 50%; background: #F4EEE6; box-shadow: 0 0 10px #fff; }
+.compass .mark.raft { background: var(--gold); transform-origin: center; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.compass .mark.satchel { border: 2px solid var(--gold); border-radius: 50%; }
+.compass .mark.eel { width: 6px; height: 6px; background: #ff5c6c; box-shadow: 0 0 8px #ff3050; border-radius: 1px; }
+.compass .cmp-off { display: none; position: absolute; inset: 0; place-items: center; font: 11px var(--mono); letter-spacing: .16em; color: #ff8f8f; }
+.compass.offline { background: repeating-linear-gradient(90deg, rgba(255, 143, 143, .05) 0 2px, transparent 2px 6px), rgba(3, 17, 26, .5); animation: flick 3.7s infinite steps(1); }
+.compass.offline > :not(.cmp-off) { display: none; }
+.compass.offline .cmp-off { display: grid; }
+
+/* Damage, glitches and reboots. */
+.dmg { animation: flick 4.3s infinite steps(1); }
+.dmg.lumen, .dmg.datacount, .dmg.depthbox { border-color: #ff8f8f; }
+.depthbox.dmg .depth { color: #ffb3a8; }
+.stats.dmg { border-color: rgba(255, 143, 143, .4); }
+.stats.dmg .bar { filter: saturate(.5); }
+.dmg.subtitle { border-left-color: #ff8f8f; }
+.glitch { animation: glitch .14s steps(2) infinite !important; }
+.glitch.stats .bar::after { width: calc(var(--v) * 100% * (.4 + .6 * var(--g, 1))) !important; }
+@keyframes flick { 0%, 100% { opacity: 1; } 31% { opacity: .55; } 32% { opacity: 1; } 67% { opacity: .8; } 68% { opacity: 1; } }
+@keyframes glitch {
+  0% { transform: translate(-3px, 1px) skewX(-6deg); filter: hue-rotate(90deg) saturate(2); clip-path: inset(10% 0 35% 0); }
+  50% { transform: translate(3px, -1px); filter: hue-rotate(-60deg); clip-path: inset(45% 0 5% 0); }
+  100% { transform: none; }
+}
+/* .subtitle and .lens already use transform for centring; glitch them with a filter only. */
+.glitch.subtitle, .glitch.lens { animation: glitchsoft .14s steps(2) infinite !important; }
+@keyframes glitchsoft { 0% { filter: hue-rotate(90deg) saturate(2) blur(.5px); opacity: .7; } 50% { filter: hue-rotate(-60deg); opacity: 1; } }
+.boot { animation: boot 1.3s ease-out !important; }
+@keyframes boot { 0% { opacity: 0; filter: brightness(3); } 10% { opacity: 1; } 18% { opacity: 0; } 30% { opacity: 1; } 38% { opacity: .3; } 50% { opacity: 1; filter: brightness(2) drop-shadow(0 0 12px var(--cyan)); } 100% { filter: none; } }
+
+/* The phone's own cracked screen, and its systems list. */
+.phone-cracks { position: absolute; inset: 0; z-index: 3; pointer-events: none; opacity: var(--crack, 0); transition: opacity 2s; }
+.phone-cracks svg { width: 100%; height: 100%; }
+.phone .systems .tutlist li .tick { color: #ff8f8f; border-color: rgba(255, 143, 143, .5); }
+.phone .systems .tutlist li.ok .tick { color: var(--cyan); }
+.phone .systems .tutlist li.ok b { text-decoration: none; }
+.phone .systems .tutlist li p { margin: 2px 0 0; font-size: 12px; }

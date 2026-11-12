@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Deeper Bloom</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Unbounded:wght@400;600;800&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Share+Tech+Mono&family=Unbounded:wght@400;600;800&display=swap">
   <link rel="stylesheet" href="style.css">
   <script type="importmap">
     {
@@ -20,9 +20,11 @@
   <canvas id="view"></canvas>
 
   <div id="hud" hidden>
+    <div id="visor" class="visor"></div>
+    <div id="compass" class="compass"></div>
     <div class="lumen"><span class="dot"></span><span id="lumen">0</span><small>Lumen</small></div>
     <div class="datacount"><span class="dot"></span><span id="data">0</span><small>Data</small></div>
-    <div class="depth" id="depth">0 m</div>
+    <div class="depthbox"><small>Depth</small><div class="depth" id="depth">0 m</div></div>
     <div id="tutorial" class="tutorial" hidden></div>
     <div class="crosshair"></div>
     <div id="lens" class="lens" hidden>
@@ -33,6 +35,7 @@
     <div id="prompt" class="prompt" hidden></div>
     <div id="danger" class="danger"></div>
     <div class="stats">
+      <div id="integrity" class="integrity"></div>
       <div class="stat" id="stat-breath"><span>Breath</span><div class="bar breath" id="bar-breath"></div></div>
       <div class="stat"><span>Health</span><div class="bar health" id="bar-health"></div></div>
       <div class="stat"><span>Food</span><div class="bar food" id="bar-food"></div></div>

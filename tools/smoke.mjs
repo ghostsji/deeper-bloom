@@ -148,6 +148,20 @@ try {
   check('goals pay Bloom points', prog.earned >= 4, `+${prog.earned}`);
   check('skills can be learned and take effect', prog.bought && prog.bag === 14, `bag ${prog.bag}`);
 
+  // The flood-damaged visor: scanning Echo and gathering 60 polyps (above) restore two systems.
+  const hud = await run(`
+    await new Promise((r) => setTimeout(r, 800));
+    return {
+      cracks: !!document.querySelector('#visor .v-cracks path'),
+      navOff: document.getElementById('compass').classList.contains('offline'),
+      vitalsDmg: document.querySelector('.stats').classList.contains('dmg'),
+      ledger: !document.querySelector('.lumen').classList.contains('dmg') && db.systems.online('ledger'),
+      comms: db.systems.online('comms'),
+      pct: document.getElementById('integrity').textContent,
+    };`);
+  check('the visor starts damaged (cracks, no compass, flickering vitals)', hud.cracks && hud.navOff && hud.vitalsDmg);
+  check('progress restores visor systems', hud.ledger && hud.comms, hud.pct);
+
   const save = await run(`
     const raw = localStorage.getItem('deeperbloom-save-v1');
     const s = raw && JSON.parse(raw);

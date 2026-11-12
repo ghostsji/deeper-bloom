@@ -36,6 +36,10 @@ Options has four tabs: Sound, Echo's voice, Controls (look sensitivity, invert m
 
 A tutorial card (top right) walks through 14 tasks one at a time: look, swim, gather Lumen, open the phone, scan, surface, build a raft, climb aboard, find food, eat, build a research station, research, use the harpoon and learn a skill. Each shows how, with your current key bindings, and ticks off when you've done it (things already done are skipped). The phone's **Guide** tab has the checklist, Skip / Start again, and how-to pages for everything. Hover almost anything on the phone, menus or Options for a tooltip. Both can be turned off in Options → Display & help. Steps live in `src/tutorial.js`, tooltips in `src/tooltips.js` (any element with `data-tip`).
 
+## The visor
+
+The HUD is your dive visor, and the flood damaged it: cracked glass, static, flickering vitals, scrambled readouts, Echo's subtitles breaking up and no compass. Eight systems come back online as you make progress, each with a reboot flash: Vital signs (eat something), Echo link (scan Echo), Lumen & Data readout (gather 15 polyps), Depth gauge (swim 150 m), Scanner overlay (scan 5 things), Navigation (build a research station: a compass with Echo, your raft and your dropped satchel), Threat sensor (cure an eel: eels show on the compass) and Visor seal (finish 2 research projects: the cracks go). SYS % (bottom left) and the phone's Status tab show what's left; the phone's own screen is cracked too until the visor is fixed. Milestones and effects live in `src/hud-systems.js` and `src/hud-fx.js`.
+
 ## Controls
 
 WASD swim (toward where you look) · mouse look · Space rise (jump on a raft) · Ctrl or C sink · Q/E turn · Shift dash · 1 harpoon · Tab phone · hold right mouse Echo Lens · F use · R eat · X stop building · Esc or P pause.

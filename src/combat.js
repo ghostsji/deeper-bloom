@@ -205,6 +205,8 @@ export function createCombat(scene, camera, world, g) {
   return {
     get equipped() { return equipped; },
     get loaded() { return !shot; },
+    /** Where the living eels are (for the threat sensor on the compass). */
+    eelPositions: () => eels.filter((e) => e.alive).map((e) => e.segs[0].getWorldPosition(new THREE.Vector3())),
     setEquipped(v) { equipped = v; gun.visible = v; },
     fire,
     // playerExposed: underwater and swimming (eels won't follow you up or onto a raft).
