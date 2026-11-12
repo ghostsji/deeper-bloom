@@ -379,3 +379,14 @@ kbd { display: inline-block; min-width: 1em; margin: 0 1px; padding: 0 6px; bord
 .phone .systems .tutlist li.ok .tick { color: var(--cyan); }
 .phone .systems .tutlist li.ok b { text-decoration: none; }
 .phone .systems .tutlist li p { margin: 2px 0 0; font-size: 12px; }
+
+/* ---- Missing phone apps ---- */
+.phone-tabs button.missing { color: var(--grey-fg); opacity: .55; }
+.phone-tabs button.missing svg { stroke-dasharray: 3 3; }
+.phone-tabs button.missing[aria-current] { color: #ff8f8f; opacity: 1; }
+.phone .missing-app { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 26px 10px; }
+.phone .missing-app .glyph { width: 74px; height: 74px; display: grid; place-items: center; border-radius: 22px; border: 2px dashed rgba(255, 143, 143, .45); color: #ff8f8f; animation: flick 3.1s infinite steps(1); }
+.phone .missing-app .glyph svg { width: 34px; height: 34px; stroke-dasharray: 3 3; }
+.phone .missing-app h3 { margin: 0; font: 700 22px 'Unbounded', sans-serif; color: var(--text); }
+.phone .missing-app .note { text-align: left; }
+.compass .mark.pod { width: 7px; height: 7px; background: var(--cyan); transform-origin: center; clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); box-shadow: 0 0 8px var(--cyan); }

@@ -40,6 +40,10 @@ A tutorial card (top right) walks through 14 tasks one at a time: look, swim, ga
 
 The HUD is your dive visor, and the flood damaged it: cracked glass, static, flickering vitals, scrambled readouts, Echo's subtitles breaking up and no compass. Eight systems come back online as you make progress, each with a reboot flash and power-up sound (damaged systems crackle when they glitch, the visor buzzes when it shorts out, and a low electrical hum (plus an air whistle through the cracks) runs under everything until it is fixed; all at the Effects volume, unmuffled since it is in your helmet): Vital signs (eat something), Echo link (scan Echo), Lumen & Data readout (gather 15 polyps), Depth gauge (swim 150 m), Scanner overlay (scan 5 things), Navigation (build a research station: a compass with Echo, your raft and your dropped satchel), Threat sensor (cure an eel: eels show on the compass) and Visor seal (finish 2 research projects: the cracks go). SYS % (bottom left) and the phone's Status tab show what's left; the phone's own screen is cracked too until the visor is fixed. Milestones and effects live in `src/hud-systems.js` and `src/hud-fx.js`.
 
+## Lost phone apps
+
+The flood washed the Codex, Status, Goals and Skills apps out of your phone: their tabs show as Missing (with a last-signal hint) until you find them. Each module lies on the reef in a salvage pod: a blinking capsule under a thin beam of light with a bright core, a sonar ring pulsing across the sand, and a ping that gets faster and louder as you close in (within about 30 m). Skills is in a far kelp patch where eels nest. Once Navigation is restored, pods show on the compass. Swim into a pod to put its app back. Build, Research and Guide are never lost. See `src/salvage.js`.
+
 ## Controls
 
 WASD swim (toward where you look) · mouse look · Space rise (jump on a raft) · Ctrl or C sink · Q/E turn · Shift dash · 1 harpoon · Tab phone · hold right mouse Echo Lens · F use · R eat · X stop building · Esc or P pause.

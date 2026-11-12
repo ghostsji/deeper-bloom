@@ -18,9 +18,10 @@ import { createMenus } from './menus.js';
 import { createTutorial, STEPS } from './tutorial.js';
 import { createSystems } from './hud-systems.js';
 import { createHudFx } from './hud-fx.js';
+import { createSalvage, APPS } from './salvage.js';
 import { setTooltips } from './tooltips.js';
 import { keyName } from './controls.js';
-import { initAudio, updateAudio, setMusic, uiSound, pop, chime, thunk, setPaused, gasp, heartbeat, warn, munch, sizzle, grab, harpoonFire, thud, hiss, bite, release, click } from './audio.js';
+import { initAudio, updateAudio, setMusic, uiSound, pop, chime, thunk, salvagePing, rebootSound, setPaused, gasp, heartbeat, warn, munch, sizzle, grab, harpoonFire, thud, hiss, bite, release, click } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 const BLOOM_FULL = 60;   // Lumen gathered for the reef to glow at full strength
@@ -68,6 +69,8 @@ const systems = createSystems({
   researched: () => RESEARCH.filter((r) => research.isUnlocked(r.id)).length,
 });
 const hudFx = createHudFx(document.body, systems);
+// The phone apps the flood washed away, in salvage pods out on the reef.
+const salvage = createSalvage(scene, world.kelpPatches);
 const survival = createSurvival({
   onBlackout: blackout,
   onChange: () => { renderBag(); save(); },
@@ -197,7 +200,7 @@ function gather(n, bright) {
 function save() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      lumen, builds: builder.serialize(), research: research.serialize(), survival: survival.serialize(), progress: progress.serialize(), tutorial: tutorial.serialize(), systems: systems.serialize(),
+      lumen, builds: builder.serialize(), research: research.serialize(), survival: survival.serialize(), progress: progress.serialize(), tutorial: tutorial.serialize(), systems: systems.serialize(), apps: salvage.serialize(),
       satchel: satchel && { pos: satchel.pos.toArray(), items: satchel.items },
     }));
   } catch { /* not saved */ }
@@ -210,6 +213,7 @@ function load() {
     research.load(data.research); // before builds: build costs depend on it
     tutorial.load(data.tutorial);
     systems.load(data.systems);
+    salvage.load(data.apps);
     builder.load(data.builds);
     setLumen(data.lumen || 0);
     renderHudData();
@@ -447,6 +451,7 @@ const phone = createPhone($('phone'), {
   onBuy: (id) => buySkill(id),
   tutorial,
   systems,
+  hasApp: (id) => salvage.found(id),
   onTutorial: (act) => {
     if (act === 'skip') tutorial.skip();
     if (act === 'resume') tutorial.load({ ...tutorial.serialize(), skipped: false });
@@ -707,8 +712,27 @@ function updateVisor(dt) {
   const deck = builder.deckNear(p);
   if (deck) points.push(point('raft', deck));
   if (satchel) points.push(point('satchel', satchel.pos));
+  if (systems.online('nav')) for (const pod of salvage.remaining()) points.push(point('pod', pod.pos));
   if (systems.online('sensor')) for (const e of combat.eelPositions()) if (e.distanceTo(p) < 45) points.push({ ...point('eel', e), dist: null });
   hudFx.update(dt, t, { heading: Math.atan2(_dir.x, -_dir.z), points, playing: state === 'playing' });
+}
+
+// ---- Salvage pods (lost phone apps) ---------------------------------------------------
+let pingClock = 0;
+function updateSalvage(dt) {
+  const { got, nearest } = salvage.update(t, camera.position);
+  if (got) {
+    rebootSound();
+    toast(`Recovered the ${got.name} app (${APPS.filter((a) => salvage.found(a.id)).length} of ${APPS.length})`, { color: '#5CF2D6' });
+    tutorial.note('salvage');
+    save();
+  }
+  // A sonar ping from the nearest pod, faster and louder as you close in.
+  if (nearest < 32 && (pingClock -= dt) <= 0) {
+    const close = 1 - nearest / 32;
+    salvagePing(close);
+    pingClock = 2.6 - close * 1.8;
+  }
 }
 
 // ---- Loop ----------------------------------------------------------------------
@@ -732,6 +756,7 @@ function frame() {
     if (camera.position.distanceTo(world.echo.position) < 7) echoSay('meet');
     if (atSurface()) { echoSay('surface'); tutorial.note('surface'); }
     if (player.onFoot) tutorial.note('deck');
+    updateSalvage(dt);
     updateTutorial();
     updateSubtitle(playTime);
     updateSurvival(dt);
@@ -775,7 +800,7 @@ function frame() {
 
 
 // ?debug exposes the internals in the console.
-if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, systems, hudFx, addLumen: (n) => setLumen(lumen + n) } });
+if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, systems, hudFx, salvage, addLumen: (n) => setLumen(lumen + n) } });
 
 renderBuildBar();
 load();

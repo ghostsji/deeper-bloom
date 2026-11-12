@@ -16,6 +16,8 @@ export const STEPS = [
     how: () => 'Swim through the glowing polyps on the reef. Lumen is what you build with.' },
   { id: 'phone', title: 'Open your phone', note: 'phone',
     how: (k) => `Press ${kbd(k('phone'))}. The game pauses while it's out; ${kbd(k('phone'))} again puts it away.` },
+  { id: 'salvage', title: 'Recover a lost app', note: 'salvage',
+    how: () => 'The flood washed four apps out of your phone. Look for a thin beam of light reaching up from the sea floor, follow it down to the blinking salvage pod, and swim into it.' },
   { id: 'scan', title: 'Scan with the Echo Lens', stat: 'scans', need: 1,
     how: () => `Hold ${kbd('Right mouse')} to raise the lens, then hold ${kbd('Left mouse')} on a creature or coral until the ring fills. Scans earn Data.` },
   { id: 'surface', title: 'Reach the surface', note: 'surface',
@@ -35,7 +37,7 @@ export const STEPS = [
   { id: 'harpoon', title: 'Try the harpoon', note: 'fire',
     how: (k) => `Press ${kbd(k('harpoon'))} to raise it and ${kbd('Left-click')} to fire. Shots wear it down; repair it at a workbench.` },
   { id: 'skill', title: 'Learn a skill', stat: 'skills', need: 1,
-    how: (k) => `Goals pay Bloom points (not Lumen). Spend them on the phone's Skills tab (${kbd(k('phone'))} → Skills).` },
+    how: (k) => `Goals pay Bloom points (not Lumen). Spend them on the phone's Skills app (${kbd(k('phone'))} → Skills). If it's missing, find its salvage pod first.` },
 ];
 
 const STAT_IDS = [...new Set(STEPS.flatMap((s) => s.stats || (s.stat ? [s.stat] : [])))];

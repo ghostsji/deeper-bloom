@@ -5,6 +5,7 @@ import { STEPS } from './tutorial.js';
 import { keyName } from './controls.js';
 import { SYSTEMS } from './hud-systems.js';
 import { crackSvg } from './hud-fx.js';
+import { APPS } from './salvage.js';
 
 // The diver's phone: Deep Bloom's app on a ruggedised handset. Tab brings it up, and the
 // game pauses while it's out. Tabs: build, research, codex, status, goals, skills and a
@@ -43,6 +44,7 @@ const GUIDES = [
   ['Breath, health and food', () => 'Breath drains underwater and refills at the surface; when it runs out you lose health. Food drains slowly. Health heals only while you\'re fed and have breath. The bars bottom left show all three.'],
   ['Food and cooking', () => `Underwater, <kbd>Left-click</kbd> a silverfin in front of you (glide in slowly, or it bolts) or the kelp you're aiming at. ${k('eat')} eats. Raw food is better cooked: press ${k('use')} at a cook fire. A kelp farm grows kelp for you; press ${k('use')} to collect it.`],
   ['The harpoon and eels', () => `${k('harpoon')} raises the harpoon and <kbd>Left-click</kbd> fires; the spear reels back before the next shot. Each shot wears it down; repair it at a workbench with kelp (${k('use')}). Blighted eels guard some kelp patches. Three hits cure one, and it drops Lumen and eel meat. They can't follow you onto a raft.`],
+  ['Missing phone apps', () => 'The flood washed the Codex, Status, Goals and Skills apps out of your phone. Each one\'s module lies on the reef in a salvage pod: a blinking capsule under a thin beam of light that reaches the surface. Pods ping louder as you get close, and once Navigation is restored they show on the compass. Swim into a pod to put its app back. Goals still pay Bloom points while the apps are missing.'],
   ['Goals and skills', () => 'Every goal (Lumen gathered, scans, fish, distance swum...) has endless tiers. Each tier pays Bloom points, which you spend on the Skills tab. Some skills need another one learned first.'],
   ['Blacking out', () => 'If your health hits zero you black out and wake on your nearest raft. Your bag drops where you fell: swim back to the gold ring to pick it up. Blacking out again before you do loses it.'],
   ['Saving', () => 'The game saves as you play. Save game (on the pause menu or the main menu) also copies it to one of three slots, and Load game brings one back.'],
@@ -67,7 +69,7 @@ const SPECIES_TINT = { polyp: '#5CF2D6', lanternfish: '#FFC46B', jelly: '#FF8FD0
 
 export function createPhone(el, g) {
   // g: { research, survival, builder, costFor, lumen(), nearStation(), placing(), onPick(id),
-  //      onStopBuilding(), onResearch(id), onEat(id), onBuy(skillId), tutorial, systems, onTutorial(skip|resume|restart) }
+  //      onStopBuilding(), onResearch(id), onEat(id), onBuy(skillId), tutorial, systems, hasApp(id), onTutorial(skip|resume|restart) }
   let tab = 'build';
 
   el.innerHTML = `
@@ -79,7 +81,7 @@ export function createPhone(el, g) {
           <div class="phone-chips"><span class="chip gold" data-data data-tip="<b>Data</b><br>Earned by scanning with the Echo Lens. Spend it on research at a research station."></span><span class="chip pink" data-bagchip data-tip="<b>Bag</b><br>The food you carry. The Deep pockets skill adds slots."></span><span class="chip cyan" data-bloom data-tip="<b>Bloom points</b><br>Earned by finishing Goal tiers. Spend them on Skills. Skills never cost Lumen."></span></div>
         </header>
         <section class="phone-body" data-body></section>
-        <nav class="phone-tabs">${TABS.map(([id, name]) => `<button type="button" data-tab="${id}" data-tip-tab="${id}">${svg(id)}${name}</button>`).join('')}</nav>
+        <nav class="phone-tabs">${TABS.map(([id, name]) => `<button type="button" data-tab="${id}" data-name="${name}">${svg(id)}<span>${name}</span></button>`).join('')}</nav>
       </div>
     </div>
     <p class="phone-hint">Tab or Esc to put it away</p>`;
@@ -231,6 +233,21 @@ export function createPhone(el, g) {
     return `<div class="note">${p.points} Bloom points to spend. Earn more from Goals.</div>${trees}`;
   }
 
+  // An app the flood washed away: an empty, broken page until you find its module.
+  const missing = (id) => APPS.some((a) => a.id === id) && !g.hasApp(id);
+  function renderMissing(id) {
+    const app = APPS.find((a) => a.id === id);
+    const found = APPS.filter((a) => g.hasApp(a.id)).length;
+    return `<div class="missing-app">
+        <div class="glyph">${svg(id)}</div>
+        <p class="label">App missing</p>
+        <h3>${app.name}</h3>
+        <p class="sub">The flood washed this app out of your phone. Its module is somewhere on the reef in a salvage pod: look for a blinking capsule under a thin beam of light, and listen for its ping. Swim into it to put the app back.</p>
+        <p class="note">Last signal: ${app.where}</p>
+        <p class="small muted">${found} of ${APPS.length} apps recovered</p>
+      </div>`;
+  }
+
   const RENDER = { build: renderBuild, research: renderResearch, codex: renderCodex, status: renderStatus, goals: renderGoals, skills: renderSkills, guide: renderGuide };
 
   function render() {
@@ -239,9 +256,15 @@ export function createPhone(el, g) {
     el.querySelector('[data-data]').textContent = `${g.research.data} Data`;
     el.querySelector('[data-bloom]').textContent = `${progress.points()} Bloom`;
     el.querySelector('[data-bagchip]').textContent = `Bag ${g.survival.bagCount}/${bagSize()}`;
-    el.querySelectorAll('[data-tab]').forEach((b) => { b.toggleAttribute('aria-current', b.dataset.tab === tab); b.dataset.tip = TAB_TIPS[b.dataset.tab](); });
+    el.querySelectorAll('[data-tab]').forEach((b) => {
+      const gone = missing(b.dataset.tab);
+      b.toggleAttribute('aria-current', b.dataset.tab === tab);
+      b.classList.toggle('missing', gone);
+      b.querySelector('span').textContent = gone ? 'Missing' : b.dataset.name;
+      b.dataset.tip = gone ? `<b>${b.dataset.name}: missing</b><br>The flood washed this app away. Find its salvage pod on the reef to get it back.` : TAB_TIPS[b.dataset.tab]();
+    });
     const scroll = body.scrollTop;
-    body.innerHTML = RENDER[tab]();
+    body.innerHTML = missing(tab) ? renderMissing(tab) : RENDER[tab]();
     body.scrollTop = scroll;
   }
 

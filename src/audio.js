@@ -460,3 +460,11 @@ export function setVisorHum({ damage = 0, cracked = false, on = true } = {}) {
     hum.buzz.gain.setTargetAtTime(0.012 + damage * 0.05, t + 0.25, 0.3);
   }
 }
+
+// Sonar ping from a nearby salvage pod: louder and higher the closer you are (0..1).
+export function salvagePing(closeness) {
+  if (!ctx) return;
+  const t = ctx.currentTime, f = 1100 + closeness * 700;
+  voice(f, t, 0.9, { gain: 0.02 + closeness * 0.05, out: sfx, echo: 0.6, attack: 0.005 });
+  voice(f * 1.5, t + 0.02, 0.5, { gain: 0.01 + closeness * 0.02, out: sfx, attack: 0.005 });
+}

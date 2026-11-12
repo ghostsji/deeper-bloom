@@ -78,7 +78,8 @@ try {
     const first = !card.hidden && card.textContent;
     dispatchEvent(new MouseEvent('mousemove', { movementX: 40, movementY: 0, clientX: innerWidth / 2, clientY: innerHeight / 2 }));
     dispatchEvent(new MouseEvent('mousemove', { movementX: -40, movementY: 0, clientX: innerWidth / 2, clientY: innerHeight / 2 })); // face forward again
-    await new Promise((r) => setTimeout(r, 200));
+    // The card updates on the next frames; give it up to 2 s.
+    for (let i = 0; i < 20 && /Look around/.test(card.textContent); i++) await new Promise((r) => setTimeout(r, 100));
     return { hud: !document.getElementById('hud').hidden, first, next: card.textContent };`);
   check('New game starts the game', dive.hud);
   check('the tutorial starts with looking around', /Look around/.test(dive.first || ''));
@@ -118,6 +119,29 @@ try {
   check('the Guide tab lists the tutorial steps', phone.tutList >= 10, `${phone.tutList} steps`);
   check('every phone tab renders', Object.values(phone.rendered).every((n) => n > 0));
   check('Tab puts the phone away', phone.closed);
+
+  // Lost phone apps: four start missing; swimming into a salvage pod brings one back.
+  const apps = await run(`
+    const missing0 = [...document.querySelectorAll('#phone [data-tab].missing')].map((b) => b.dataset.tab);
+    const pods0 = db.salvage.remaining().length;
+    const pod = db.salvage.remaining().find((p) => p.id === 'codex');
+    const back = db.camera.position.clone();
+    db.camera.position.copy(pod.pos);
+    await new Promise((r) => setTimeout(r, 400));
+    db.camera.position.copy(back);
+    dispatchEvent(new KeyboardEvent('keydown', { code: 'Tab' }));
+    dispatchEvent(new KeyboardEvent('keyup', { code: 'Tab' }));
+    await new Promise((r) => setTimeout(r, 300));
+    const missing1 = [...document.querySelectorAll('#phone [data-tab].missing')].map((b) => b.dataset.tab);
+    document.querySelector('#phone [data-tab="skills"]').click();
+    const page = document.querySelector('#phone .missing-app h3')?.textContent;
+    dispatchEvent(new KeyboardEvent('keydown', { code: 'Tab' }));
+    dispatchEvent(new KeyboardEvent('keyup', { code: 'Tab' }));
+    await new Promise((r) => setTimeout(r, 200));
+    return { missing0, pods0, found: db.salvage.found('codex'), missing1, page, saved: JSON.parse(localStorage.getItem('deeperbloom-save-v1')).apps };`);
+  check('Codex, Status, Goals and Skills start missing', apps.missing0.join() === 'codex,status,goals,skills' && apps.pods0 === 4, apps.missing0.join());
+  check('swimming into a salvage pod recovers its app', apps.found && !apps.missing1.includes('codex') && apps.missing1.length === 3 && apps.saved?.includes('codex'), apps.missing1.join());
+  check('a missing app shows where to look', apps.page === 'Skills');
 
   const scan = await run(`
     db.camera.position.set(0, 2.6, 6);
