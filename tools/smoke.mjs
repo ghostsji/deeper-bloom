@@ -152,7 +152,7 @@ try {
   const hud = await run(`
     await new Promise((r) => setTimeout(r, 800));
     const A = await import('./src/audio.js');
-    A.glitchSound(); A.staticSound(); A.rebootSound(); // the visor's sounds play without errors
+    A.glitchSound(); A.staticSound(); A.rebootSound(); A.setVisorHum({ damage: 0.5, cracked: true }); // the visor's sounds play without errors
     return {
       cracks: !!document.querySelector('#visor .v-cracks path'),
       navOff: document.getElementById('compass').classList.contains('offline'),

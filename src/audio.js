@@ -414,3 +414,49 @@ export function rebootSound() {
   beep(t + 0.82, 880, 880, 0.12, { type: 'triangle', gain: 0.06 });
   beep(t + 0.96, 1320, 1320, 0.3, { type: 'triangle', gain: 0.06 });
 }
+
+// A low electrical hum while the visor is damaged: a mains-style buzz that wavers (a loose
+// connection), plus a thin whistle of air through the cracks while the glass is broken.
+// Fades as systems come back, and stops once everything is fixed.
+let hum = null;
+function makeHum() {
+  const out = ctx.createGain(); out.gain.value = 0; out.connect(visor);
+  // Buzz: two detuned saws at 50 Hz and its octave, darkened.
+  const buzzF = ctx.createBiquadFilter(); buzzF.type = 'lowpass'; buzzF.frequency.value = 320; buzzF.Q.value = 2;
+  const buzz = ctx.createGain(); buzz.gain.value = 0; buzzF.connect(buzz); buzz.connect(out);
+  for (const [f, g] of [[50, 0.5], [50.6, 0.35], [100, 0.25]]) {
+    const o = ctx.createOscillator(), og = ctx.createGain();
+    o.type = 'sawtooth'; o.frequency.value = f; og.gain.value = g;
+    o.connect(og); og.connect(buzzF); o.start();
+  }
+  // Waver: a slow LFO on the filter and level, so it sounds unsteady rather than like a tone.
+  const lfo = ctx.createOscillator(), lfoG = ctx.createGain();
+  lfo.frequency.value = 0.37; lfoG.gain.value = 90; lfo.connect(lfoG); lfoG.connect(buzzF.frequency); lfo.start();
+  // Leak: filtered noise whistling through the cracks.
+  const len = ctx.sampleRate * 2, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+  const leakF = ctx.createBiquadFilter(); leakF.type = 'bandpass'; leakF.frequency.value = 5200; leakF.Q.value = 9;
+  const leak = ctx.createGain(); leak.gain.value = 0;
+  src.connect(leakF); leakF.connect(leak); leak.connect(out); src.start();
+  const wob = ctx.createOscillator(), wobG = ctx.createGain();
+  wob.frequency.value = 0.13; wobG.gain.value = 900; wob.connect(wobG); wobG.connect(leakF.frequency); wob.start();
+  return { out, buzz, leak };
+}
+
+/** damage 0..1 (how much of the visor is still broken), cracked: the glass is still cracked.
+ *  on: false while the HUD isn't in use (menus, title). */
+export function setVisorHum({ damage = 0, cracked = false, on = true } = {}) {
+  if (!ctx) return;
+  hum ??= makeHum();
+  const t = ctx.currentTime, live = on && damage > 0;
+  hum.out.gain.setTargetAtTime(live ? 1 : 0, t, live ? 0.6 : 0.25);
+  // Quiet even at its worst: a presence under everything, not a drone over it.
+  hum.buzz.gain.setTargetAtTime(0.012 + damage * 0.05, t, 0.8);
+  hum.leak.gain.setTargetAtTime(cracked ? 0.004 + damage * 0.01 : 0, t, 1.2);
+  // A momentary dip and swell now and then, like the power is struggling.
+  if (live && Math.random() < 0.03) { // called about 4 times a second: roughly every 8 s
+    hum.buzz.gain.setTargetAtTime(0.002, t, 0.04);
+    hum.buzz.gain.setTargetAtTime(0.012 + damage * 0.05, t + 0.25, 0.3);
+  }
+}

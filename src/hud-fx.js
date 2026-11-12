@@ -1,5 +1,5 @@
 import { SYSTEMS } from './hud-systems.js';
-import { glitchSound, staticSound, rebootSound } from './audio.js';
+import { glitchSound, staticSound, rebootSound, setVisorHum } from './audio.js';
 
 // The visor HUD: corner brackets, scanlines and cracked glass over the view, glitches on the
 // systems the flood damaged, the compass (once Navigation is back) and the boot-up flash when a
@@ -85,7 +85,7 @@ export function createHudFx(root, systems) {
   // ---- Glitches ----
   const texts = new Map(); // element -> { text, prefix, sys }
   const bursts = Object.fromEntries(SYSTEMS.map((s) => [s.id, { next: 1 + Math.random() * 4, until: 0 }]));
-  let staticUntil = 0, nextStatic = 4, booted = false;
+  let staticUntil = 0, nextStatic = 4, booted = false, humClock = 0;
 
   function paint(el) {
     const t = texts.get(el);
@@ -160,6 +160,12 @@ export function createHudFx(root, systems) {
         nextStatic = staticUntil + (3 + Math.random() * 9) / damage;
       }
       visor.classList.toggle('fuzz', t < staticUntil);
+      // The damage hum, a few times a second: louder the more is broken, a crack whistle while
+      // the glass is cracked, silent behind menus and once everything is fixed.
+      if ((humClock -= dt) <= 0) {
+        humClock = 0.25;
+        setVisorHum({ damage, cracked: !systems.online('visor'), on: info.playing });
+      }
       if (systems.online('nav')) renderCompass(info.heading, info.points);
     },
   };
