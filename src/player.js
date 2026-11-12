@@ -46,6 +46,7 @@ export function createPlayer(camera, canvas) {
   addEventListener('keyup', onKey(false));
   addEventListener('blur', () => keys.clear());
 
+  const mouse = { sens: 1, invertY: false };
   const look = (dx, dy) => {
     const oldYaw = yaw, oldPitch = pitch;
     yaw -= dx * SWIM.look;
@@ -67,7 +68,8 @@ export function createPlayer(camera, canvas) {
   };
   addEventListener('mousemove', (e) => {
     cursor.x = e.clientX / innerWidth; cursor.y = e.clientY / innerHeight; cursor.in = true;
-    if (document.pointerLockElement === canvas || cursorLook) look(e.movementX, e.movementY);
+    // Settings → Controls: look sensitivity and invert Y apply to the mouse only (not Q/E).
+    if (document.pointerLockElement === canvas || cursorLook) look(e.movementX * mouse.sens, e.movementY * mouse.sens * (mouse.invertY ? -1 : 1));
   });
   document.addEventListener('mouseleave', () => { cursor.in = false; });
   // Clicking the view retries the lock (it works in a normal browser tab, not in embedded ones).
@@ -145,8 +147,7 @@ export function createPlayer(camera, canvas) {
 
   return {
     setCursorLook(v) { cursorLook = v; },
-    // Mouse movement reported by a host app (the Flutter shell) instead of pointer lock.
-    lookBy(dx, dy) { look(dx, dy); },
+    setMouse({ sens = 1, invertY = false } = {}) { mouse.sens = sens; mouse.invertY = invertY; },
     setDeckQuery(fn) { deckAt = fn; },
     clearKeys() { keys.clear(); },
     get speed() { return vel.length(); },

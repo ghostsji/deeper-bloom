@@ -10,13 +10,15 @@
     "check": "node tools/check.mjs",
     "test": "node --test test/*.test.js",
     "smoke": "node tools/smoke.mjs",
-    "verify": "node tools/check.mjs && node --test test/*.test.js && node tools/smoke.mjs"
+    "verify": "node tools/check.mjs && node --test test/*.test.js && node tools/smoke.mjs",
+    "package": "node tools/package.mjs"
   },
   "dependencies": {
     "msedge-tts": "2.1.0",
     "three": "0.170.0"
   },
   "devDependencies": {
+    "@electron/packager": "20.3.0",
     "electron": "^45.1.0"
   },
   "main": "electron/main.cjs",

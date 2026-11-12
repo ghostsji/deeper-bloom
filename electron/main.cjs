@@ -4,10 +4,10 @@ const { app, BrowserWindow, Menu, protocol, net, ipcMain } = require('electron')
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { createTTS } = require('./tts.cjs');
+const { createSaves } = require('./saves.cjs');
 
 const ROOT = path.join(__dirname, '..');
 
-// ES modules don't load from file://, so the game is served from app://game/ instead.
 // DEEPER_BLOOM_USER_DATA=<folder> keeps saves and caches there instead (the smoke test uses a
 // throwaway folder so it never touches your own save).
 if (process.env.DEEPER_BLOOM_USER_DATA) app.setPath('userData', process.env.DEEPER_BLOOM_USER_DATA);
@@ -20,16 +20,17 @@ if (process.env.DEEPER_BLOOM_HEADLESS) {
 // Let the main menu's music start without waiting for a click.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
+// ES modules don't load from file://, so the game is served from app://game/ instead.
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } },
 ]);
 
-function createWindow() {
+function createWindow(saves) {
   // DEEPER_BLOOM_HEADLESS=1 is for automated testing: the window is shown (hidden windows
   // barely run the game loop) but placed far off-screen and kept off the taskbar.
   const headless = !!process.env.DEEPER_BLOOM_HEADLESS;
   const win = new BrowserWindow({
-    fullscreen: !headless,
+    fullscreen: !headless && saves.prefs().startFullscreen,
     width: 1280,
     height: 720,
     ...(headless ? { x: -32000, y: -32000, skipTaskbar: true, focusable: false } : {}),
@@ -63,7 +64,19 @@ app.whenReady().then(() => {
     const audio = await tts.synth(req);
     return audio.buffer.slice(audio.byteOffset, audio.byteOffset + audio.byteLength);
   });
-  createWindow();
+  // Save slots, fullscreen and desktop preferences for the game's menus.
+  const saves = createSaves(app.getPath('userData'));
+  ipcMain.handle('saves:list', () => saves.list());
+  ipcMain.handle('saves:read', (_e, n) => saves.read(n));
+  ipcMain.handle('saves:write', (_e, n, data, summary) => saves.write(n, data, summary));
+  ipcMain.handle('prefs:get', () => saves.prefs());
+  ipcMain.handle('prefs:set', (_e, patch) => saves.setPrefs(patch));
+  ipcMain.handle('window:fullscreen', (e, on) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    if (typeof on === 'boolean') win.setFullScreen(on);
+    return win.isFullScreen();
+  });
+  createWindow(saves);
 });
 
 app.on('window-all-closed', () => app.quit());

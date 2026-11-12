@@ -48,26 +48,38 @@
     <div id="hint" class="hint">WASD swim · Mouse look · Space rise · Ctrl sink · Q/E turn · Shift dash · Tab phone · 1 harpoon · Hold right mouse Echo Lens · Click grab fish/kelp · R eat · Esc or P pause</div>
   </div>
 
-  <div id="title" class="screen">
-    <div class="card">
+  <div id="title" class="mainmenu">
+    <div class="mm-col">
       <p class="eyebrow">Deep Bloom 2</p>
-      <h1>Deeper Bloom</h1>
+      <h1>Deeper<br>Bloom</h1>
       <p class="lede">The tide ran backwards. This time you go down yourself.</p>
-      <button id="dive" class="primary">Dive</button>
+      <nav class="mm-items">
+        <button type="button" data-menu="continue">Continue</button>
+        <button type="button" id="dive" data-menu="new">New game</button>
+        <button type="button" data-menu="load">Load game</button>
+        <button type="button" data-menu="save">Save game</button>
+        <button type="button" data-menu="options">Options</button>
+        <button type="button" data-menu="exit" hidden>Exit</button>
+      </nav>
       <p class="small">Plays fullscreen with mouse and keyboard. Headphones recommended.</p>
     </div>
   </div>
 
   <div id="pause" class="screen" hidden>
-    <div class="card">
-      <p class="eyebrow">Paused</p>
-      <h2>Holding your breath</h2>
-      <button id="resume" class="primary">Resume</button>
-      <button id="opensettings" class="secondary">Settings</button>
-      <button id="quit" class="secondary" hidden>Quit to desktop</button>
+    <div class="card pausecard">
+      <p class="eyebrow" id="pause-eyebrow">Paused</p>
+      <h2 id="pause-title">Holding your breath</h2>
+      <button type="button" id="resume" class="primary">Resume</button>
+      <button type="button" id="savegame" class="secondary">Save game</button>
+      <button type="button" id="opensettings" class="secondary">Options</button>
+      <button type="button" id="tomenu" class="secondary">Main menu</button>
+      <button type="button" id="quit" class="secondary" hidden>Quit to desktop</button>
       <p class="small">WASD swim · Mouse look · Space rise · Ctrl sink · Q/E turn · Shift dash · Tab phone · 1 harpoon · Hold RMB lens · F use · R eat</p>
     </div>
   </div>
+
+  <div id="slots" class="screen" hidden></div>
+  <div id="confirm" class="screen" hidden></div>
 
   <div id="phone" class="phone" hidden></div>
 

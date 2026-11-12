@@ -10,3 +10,6 @@ assets/voice/.cache/
 *.log
 Thumbs.db
 .DS_Store
+
+# Packaged builds (npm run package)
+dist/

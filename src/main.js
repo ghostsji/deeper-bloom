@@ -1,6 +1,3 @@
-// The Flutter shell bridge goes first: it sets up the live-voice connection voice.js reads.
-import { SHELL, toShell, onShell, dispatchShell } from './shell.js';
-import { setBindings } from './controls.js';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -13,11 +10,11 @@ import { createSurvival, ITEMS, GEAR, gearMax, bagSize } from './survival.js';
 import * as progress from './progress.js';
 import { createCombat } from './combat.js';
 import { createResearch, RESEARCH, SPECIES } from './research.js';
-import { createPhone, PIECE_INFO } from './phone.js';
-import { VOICE_PACKS } from './voice-settings.js';
+import { createPhone } from './phone.js';
 import { ECHO_LINES } from './echo-lines.js';
-import { speakLine, pauseVoice, systemVoices } from './voice.js';
+import { speakLine, pauseVoice } from './voice.js';
 import { createSettings } from './settings.js';
+import { createMenus } from './menus.js';
 import { initAudio, updateAudio, setMusic, uiSound, pop, chime, thunk, setPaused, gasp, heartbeat, warn, munch, sizzle, grab, harpoonFire, thud, hiss, bite, release, click } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
@@ -98,13 +95,14 @@ const combat = createCombat(scene, camera, world, {
   onFishSpeared: () => { thud(); catchFish('Speared'); },
 });
 
-// Inside the Flutter desktop shell (deeper_bloom_shell), Flutter draws the pause menu and
-// the page talks to it over WebView2 messages.
+// Options opens from the main menu or the pause menu, and Back returns there.
 const settings = createSettings($('settings'), {
   onBack: () => {
     settings.hide();
-    if (SHELL) toShell({ type: 'state', state: 'paused' }); else $('pause').hidden = false;
+    if (state === 'paused') $('pause').hidden = false;
   },
+  onControls: (s) => player.setMouse({ sens: s.lookSens, invertY: s.invertY }),
+  sound: (kind) => uiSound(kind),
 });
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
@@ -148,7 +146,7 @@ function updateSubtitle(t) {
 }
 
 // ---- Game state ----------------------------------------------------------------
-let state = 'title';   // title | playing | paused | phone | shellphone (Flutter shell) | blackout
+let state = 'title';   // title | playing | paused | phone | blackout
 let lumen = 0;
 let playTime = 0;
 
@@ -425,33 +423,9 @@ const phone = createPhone($('phone'), {
   onBuy: (id) => buySkill(id),
 });
 
-// In the Flutter shell the whole phone is drawn by Flutter: the game pauses and sends it
-// everything the four tabs show; Flutter answers with what you did (see onShell below).
-function phoneSnapshot(tab) {
-  const st = survival.stats;
-  return {
-    type: 'phone', tab, lumen, data: research.data, placing, atSurface: atSurface(), atStation: nearStation(),
-    pieces: builder.available().map((p) => ({ id: p.id, name: p.name, cost: costFor(p.id), info: PIECE_INFO[p.id] || '' })),
-    research: RESEARCH.map((r) => ({
-      id: r.id, name: r.name, desc: r.desc, cost: r.cost, owned: research.isUnlocked(r.id), can: research.canResearch(r.id),
-      needs: r.needs.map((id) => ({ name: SPECIES.find((sp) => sp.id === id).name, ok: research.complete(id) })),
-    })),
-    codex: SPECIES.map((sp) => ({ id: sp.id, name: sp.name, need: sp.need, count: research.counts[sp.id] || 0, complete: research.complete(sp.id), text: sp.text })),
-    stats: { health: st.health, breath: st.breath, food: st.food },
-    gear: { harpoon: survival.gear.harpoon, max: gearMax('harpoon'), repair: GEAR.harpoon.repair },
-    bag: Object.keys(ITEMS).filter((k) => survival.bag[k]).map((k) => ({ id: k, name: ITEMS[k].name, count: survival.bag[k], food: ITEMS[k].food, health: ITEMS[k].health })),
-    bagCount: survival.bagCount, bagSize: bagSize(),
-    progress: progress.snapshot(),
-  };
-}
 function openPhone(tab) {
   setLens(false);
   if (document.pointerLockElement) document.exitPointerLock();
-  if (SHELL) {
-    setState('shellphone');
-    toShell(phoneSnapshot(tab));
-    return;
-  }
   setState('phone');
   phone.show(tab);
 }
@@ -503,9 +477,6 @@ addEventListener('mouseup', (e) => {
 });
 addEventListener('contextmenu', (e) => e.preventDefault());
 addEventListener('wheel', (e) => {
-  // In the Flutter shell the plugin's own (misplaced) wheel events are ignored; shellScroll
-  // sends the real ones.
-  if (SHELL && e.isTrusted) return;
   if (state === 'playing' && placing) cyclePiece(Math.sign(e.deltaY));
 }, { passive: true });
 
@@ -513,7 +484,6 @@ addEventListener('wheel', (e) => {
 // player hits Esc fast), and a refusal may never settle, so nothing waits on them: the game
 // starts at once with cursor look, and pointerlockchange switches to mouse-look.
 const ELECTRON = navigator.userAgent.includes('Electron');
-const DESKTOP_APP = ELECTRON || !!SHELL; // their windows are already fullscreen
 
 function requestLock() {
   const lock = (opts) => Promise.resolve(canvas.requestPointerLock(opts));
@@ -522,11 +492,10 @@ function requestLock() {
 
 function engage() {
   initAudio();
-  // The Flutter shell captures the mouse itself and sends look movement over messages.
-  player.setCursorLook(!SHELL);
+  player.setCursorLook(true);
   setState('playing');
-  if (SHELL) return;
-  if (!document.fullscreenElement && !DESKTOP_APP) document.documentElement.requestFullscreen?.({ navigationUI: 'hide' })?.catch(() => {});
+  // The desktop app's window is already fullscreen (or windowed by choice in Options).
+  if (!document.fullscreenElement && !ELECTRON) document.documentElement.requestFullscreen?.({ navigationUI: 'hide' })?.catch(() => {});
   // In fullscreen, Chrome and Edge let the game keep browser shortcuts like Ctrl+W (Ctrl sinks).
   navigator.keyboard?.lock?.(['ControlLeft', 'ControlRight', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyC', 'Space']).catch(() => {});
   requestLock();
@@ -534,12 +503,12 @@ function engage() {
 
 function setState(s) {
   state = s;
-  $('title').hidden = s !== 'title' || !!SHELL; // the shell draws its own main menu
-  $('pause').hidden = s !== 'paused' || !!SHELL;
-  toShell({ type: 'state', state: s });
-  if (s === 'title') setMusic('title'); else if (s === 'playing') setMusic('reef');
-  if (SHELL) document.body.style.cursor = s === 'playing' ? 'none' : '';
-  if (s !== 'paused') settings.hide();
+  $('title').hidden = s !== 'title';
+  $('pause').hidden = s !== 'paused';
+  if (s === 'title') { setMusic('title'); menus.renderMain(); } else if (s === 'playing') setMusic('reef');
+  if (s !== 'paused' && s !== 'title') settings.hide();
+  if (s === 'playing') { $('slots').hidden = true; $('confirm').hidden = true; }
+  if (s === 'paused') showPause();
   if (s !== 'phone' && phone.open) phone.hide();
   $('hud').hidden = s === 'title';
   setPaused(s !== 'playing' && s !== 'title'); // menu music plays at full volume
@@ -547,11 +516,12 @@ function setState(s) {
   if (s !== 'playing') { player.clearKeys(); setLens(false); }
 }
 
-// Diving in from the title screen (the Dive button, or the Flutter shell's main menu).
-// The title flyover moves the camera, so the first dive starts from a fixed spot and later
-// ones (back from the main menu) from where you left off.
+// ---- Main menu, pause menu and save slots ----------------------------------------
+// The title flyover moves the camera, so a dive starts from a fixed spot, or (back from
+// the main menu) from where you left off.
 let resumeAt = null;
 function startGame() {
+  ready = false;
   camera.position.copy(resumeAt ?? new THREE.Vector3(0, 7, 24));
   engage();
   echoSay('arrive');
@@ -559,86 +529,69 @@ function startGame() {
   echoSay('harpoon');
   setTimeout(() => $('hint').classList.add('gone'), 9000);
 }
-$('dive').addEventListener('click', startGame);
-$('resume').addEventListener('click', engage);
-$('opensettings').addEventListener('click', () => { $('pause').hidden = true; settings.show(); });
-// The desktop app has no browser chrome to close, so it gets a quit button.
-// Messages from the Flutter shell.
-onShell('look', (m) => { if (state === 'playing') player.lookBy(m.dx, m.dy); });
-// Keys Flutter caught (the page doesn't always have keyboard focus): replay them here.
-onShell('key', (m) => dispatchEvent(new KeyboardEvent(m.down ? 'keydown' : 'keyup', { code: m.code })));
-onShell('scroll', (m) => shellScroll(m));
-onShell('pause', () => { if (state === 'playing') setState('paused'); });
-onShell('resume', () => { if (state === 'paused') engage(); });
-onShell('settings', () => { if (state === 'paused') { settings.show(); toShell({ type: 'state', state: 'settings' }); } });
-// The phone.
-onShell('pick', (m) => { if (state === 'shellphone') { startPlacing(m.id); engage(); } });
-onShell('stopBuilding', () => { if (state === 'shellphone') { stopPlacing(); engage(); } });
-onShell('closeMenu', () => { if (state === 'shellphone') engage(); });
-onShell('research', (m) => {
-  if (state !== 'shellphone' || !nearStation() || !research.research(m.id)) return;
-  chime();
-  toast(`Researched: ${RESEARCH.find((r) => r.id === m.id).name}`);
-  toShell(phoneSnapshot());
-});
-onShell('eat', (m) => { if (state === 'shellphone') { eat(m.id); toShell(phoneSnapshot()); } });
-onShell('buyNode', (m) => { if (state === 'shellphone') { buySkill(m.id); toShell(phoneSnapshot()); } });
-// Flutter's Settings screen edits Echo's voice through these.
-const voiceState = () => ({
-  type: 'voiceState', settings: settings.state(), packs: VOICE_PACKS.map((p) => ({ id: p.id, name: p.name })),
-  systemVoices: systemVoices().map((v) => v.name),
-});
-onShell('getVoiceState', () => toShell(voiceState()));
-onShell('setVoice', (m) => settings.apply(m.patch));
-onShell('previewVoice', () => settings.preview());
-onShell('stopVoice', () => settings.stopPreview());
-onShell('bindings', (m) => setBindings(m.map));
-onShell('uiSound', (m) => uiSound(m.kind));
-// The shell's main menu and save slots. Saves are the same JSON the game keeps in
-// localStorage; the shell stores copies as files. Loading or starting over reloads the page.
+
+const hasSave = () => { try { return !!localStorage.getItem(SAVE_KEY); } catch { return false; } };
 const saveSummary = () => ({
   lumen, data: research.data, playTime: Math.round(playTime), builds: builder.serialize().length,
   codex: SPECIES.filter((sp) => research.complete(sp.id)).length, codexTotal: SPECIES.length,
 });
-onShell('startGame', () => { if (state === 'title') startGame(); });
-onShell('toTitle', () => {
-  save();
-  resumeAt = camera.position.clone();
-  setState('title');
-});
-onShell('getSave', () => {
+// The game's own save (the same JSON it keeps between visits), for copying into a slot.
+function currentSave() {
   save();
   let data = null;
   try { data = localStorage.getItem(SAVE_KEY); } catch { /* storage blocked */ }
-  toShell({ type: 'saveData', data, summary: data ? saveSummary() : null });
-});
-onShell('loadSave', (m) => {
-  try { localStorage.setItem(SAVE_KEY, m.data); } catch { /* storage blocked */ }
+  return { data, summary: data ? saveSummary() : null };
+}
+// Loading a slot or starting over reloads the page with the new save. The game then waits
+// on a "Ready to dive" card, since the mouse can only be captured after a click.
+const READY = 'deeperbloom-ready';
+function restart(data) {
+  try {
+    if (data) localStorage.setItem(SAVE_KEY, data); else localStorage.removeItem(SAVE_KEY);
+    sessionStorage.setItem(READY, data ? 'load' : 'new');
+  } catch { /* storage blocked */ }
   location.reload();
-});
-onShell('newGame', () => {
-  try { localStorage.removeItem(SAVE_KEY); } catch { /* storage blocked */ }
-  location.reload();
+}
+
+const menus = createMenus({ main: $('title'), slots: $('slots'), confirm: $('confirm') }, {
+  hasSave,
+  canExit: ELECTRON,
+  currentSave,
+  onContinue: startGame,
+  onStartNew: () => (hasSave() ? restart(null) : startGame()),
+  onLoad: (data) => restart(data),
+  onOptions: () => settings.show(),
+  onExit: () => window.close(),
+  sound: (kind) => uiSound(kind),
 });
 
-// The mouse wheel, as reported by the Flutter shell: scroll whatever is under the cursor
-// (the phone, Settings, ...), and pass it on as a wheel event for the game's own listeners.
-const scrollable = (n) => /(auto|scroll)/.test(getComputedStyle(n).overflowY) && n.scrollHeight > n.clientHeight;
-function shellScroll(msg) {
-  const { x, y, dx, dy } = msg;
-  window.lastShellScroll = msg; // for debugging the bridge
-  const target = document.elementFromPoint(x, y);
-  let box = null;
-  for (let n = target; n && !box; n = n.parentElement) if (scrollable(n)) box = n;
-  // Nothing scrollable right under the cursor: scroll whichever panel is open.
-  box ??= [$('phone').hidden ? null : $('phone').querySelector('[data-body]'), $('settings').hidden ? null : $('settings').querySelector('.card')]
-    .find((n) => n && scrollable(n));
-  box?.scrollBy({ top: dy, left: dx });
-  (target || window).dispatchEvent(new WheelEvent('wheel', { deltaX: dx, deltaY: dy, bubbles: true }));
+let ready = false; // the "Ready to dive" card after loading or starting over
+function showPause() {
+  $('pause-eyebrow').textContent = ready ? 'Ready' : 'Paused';
+  $('pause-title').textContent = ready ? 'Ready to dive' : 'Holding your breath';
+  $('resume').textContent = ready ? 'Dive' : 'Resume';
+  $('savegame').hidden = ready;
 }
+$('resume').addEventListener('click', () => (ready ? startGame() : engage()));
+$('savegame').addEventListener('click', () => {
+  $('pause').hidden = true;
+  menus.openSlots(true, () => { if (state === 'paused') $('pause').hidden = false; });
+});
+$('opensettings').addEventListener('click', () => { $('pause').hidden = true; settings.show(); });
+$('tomenu').addEventListener('click', () => {
+  save();
+  if (!ready) resumeAt = camera.position.clone();
+  ready = false;
+  setState('title');
+});
+// The desktop app has no browser chrome to close, so it gets a quit button.
 if (ELECTRON) {
   $('quit').hidden = false;
   $('quit').addEventListener('click', () => window.close());
+}
+for (const id of ['resume', 'savegame', 'opensettings', 'tomenu', 'quit']) {
+  $(id).addEventListener('pointerenter', () => uiSound('hover'));
+  $(id).addEventListener('click', () => uiSound('click'));
 }
 
 // A lock asked for mid-way through entering fullscreen is refused, so ask again once it's done.
@@ -656,8 +609,6 @@ document.addEventListener('pointerlockchange', () => {
 });
 addEventListener('keydown', (e) => {
   // Tab and J are keyboard input, which counts as a user gesture, so closing re-locks the mouse.
-  if (SHELL && e.code === 'KeyB' && state === 'playing') openPhone('build');
-  else if (SHELL && ['KeyB', 'KeyJ', 'Escape', 'Tab'].includes(e.code) && state === 'shellphone') { engage(); return; }
   if (e.code === 'Tab' && state === 'playing') openPhone();
   else if ((e.code === 'Tab' || e.code === 'KeyJ') && state === 'phone') engage();
   else if (e.code === 'KeyJ' && state === 'playing') openPhone('codex');
@@ -736,18 +687,20 @@ function frame() {
 
 
 // ?debug exposes the internals in the console.
-if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { renderer, composer, scene, camera, world, player, builder, research, survival, combat, shellScroll, dispatchShell, addLumen: (n) => setLumen(lumen + n) } });
+if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, addLumen: (n) => setLumen(lumen + n) } });
 
 renderBuildBar();
 load();
 renderGear();
-setState('title'); // announces the title screen (the Flutter shell shows its main menu and sends key bindings)
-// Menu music. The desktop apps allow sound straight away; a browser waits for a first click or key.
-if (DESKTOP_APP) initAudio();
+// Back from loading a slot or starting over: wait on the ready card. Otherwise, the main menu.
+let wasReady = null;
+try { wasReady = sessionStorage.getItem(READY); sessionStorage.removeItem(READY); } catch { /* none */ }
+if (wasReady) {
+  ready = true;
+  camera.position.set(0, 7, 24);
+  setState('paused');
+} else setState('title');
+// Menu music. The desktop app allows sound straight away; a browser waits for a first click or key.
+if (ELECTRON) initAudio();
 else for (const type of ['pointerdown', 'keydown']) addEventListener(type, () => initAudio(), { once: true });
-// The web menus' buttons get the same sounds as the Flutter menu.
-for (const id of ['dive', 'resume', 'opensettings', 'quit']) {
-  $(id).addEventListener('pointerenter', () => uiSound('hover'));
-  $(id).addEventListener('click', () => uiSound('click'));
-}
 frame();

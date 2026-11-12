@@ -1,8 +1,9 @@
 // Smoke test: boots the real game in an off-screen Electron window (with a throwaway profile, so
 // your own save is never touched) and plays the basics through DevTools.
 //   npm run smoke
-// Fails on any page error, or if diving, swimming, the phone, scanning, building, goals,
-// skills or saving stop working.
+//   npm run smoke -- --packaged   (tests the build from npm run package instead)
+// Fails on any page error, or if the menus, diving, swimming, the phone, scanning, building,
+// goals, skills, saving, save slots, Options or loading stop working.
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -10,12 +11,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const electron = path.join(root, 'node_modules', 'electron', 'dist', process.platform === 'win32' ? 'electron.exe' : 'electron');
+const packaged = process.argv.includes('--packaged');
+const electron = packaged
+  ? path.join(root, 'dist', 'Deeper Bloom-win32-x64', 'Deeper Bloom.exe')
+  : path.join(root, 'node_modules', 'electron', 'dist', process.platform === 'win32' ? 'electron.exe' : 'electron');
 const PORT = 9231;
 const profile = mkdtempSync(path.join(tmpdir(), 'deeper-bloom-smoke-'));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const app = spawn(electron, [root, `--remote-debugging-port=${PORT}`], {
+const app = spawn(electron, [...(packaged ? [] : [root]), `--remote-debugging-port=${PORT}`], {
   env: { ...process.env, DEEPER_BLOOM_DEBUG: '1', DEEPER_BLOOM_HEADLESS: '1', DEEPER_BLOOM_USER_DATA: profile },
   stdio: 'ignore',
 });
@@ -59,16 +63,19 @@ try {
   const boot = await run(`
     let frames = 0; const t0 = performance.now();
     await new Promise((r) => { const f = () => (performance.now() - t0 < 1000 ? (frames++, requestAnimationFrame(f)) : r()); requestAnimationFrame(f); });
-    return { db: !!window.db, title: !document.getElementById('title').hidden, fps: frames };`);
+    const vis = (m) => !document.querySelector('[data-menu="' + m + '"]').hidden;
+    return { db: !!window.db, title: !document.getElementById('title').hidden, fps: frames,
+      menu: { cont: vis('continue'), exit: vis('exit'), saveOff: document.querySelector('[data-menu="save"]').disabled } };`);
   check('the game loop runs', boot.fps >= 20, `${boot.fps} fps`);
   check('the game loads (debug hooks present)', boot.db);
-  check('the title screen shows', boot.title);
+  check('the main menu shows', boot.title);
+  check('a fresh profile has no Continue, Save is off, Exit is there', !boot.menu.cont && boot.menu.saveOff && boot.menu.exit);
 
   const dive = await run(`
     document.getElementById('dive').click();
     await new Promise((r) => setTimeout(r, 600));
     return { hud: !document.getElementById('hud').hidden };`);
-  check('Dive starts the game', dive.hud);
+  check('New game starts the game', dive.hud);
 
   const swim = await run(`
     const p0 = db.camera.position.clone();
@@ -97,7 +104,6 @@ try {
 
   const scan = await run(`
     db.camera.position.set(0, 2.6, 6);
-    db.player.lookBy(0, 0);
     const before = db.research.data;
     dispatchEvent(new MouseEvent('mousedown', { button: 2 }));
     dispatchEvent(new MouseEvent('mousedown', { button: 0 }));
@@ -126,11 +132,71 @@ try {
   check('skills can be learned and take effect', prog.bought && prog.bag === 14, `bag ${prog.bag}`);
 
   const save = await run(`
-    db.dispatchShell?.({ type: 'noop' });
     const raw = localStorage.getItem('deeperbloom-save-v1');
     const s = raw && JSON.parse(raw);
     return { saved: !!s, hasProgress: !!s?.progress, hasBuilds: Array.isArray(s?.builds) };`);
   check('the game saves (with progress and builds)', save.saved && save.hasProgress && save.hasBuilds);
+
+  const $ = (id) => `document.getElementById('${id}')`;
+  const menus = await run(`
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const shown = (id) => !document.getElementById(id).hidden;
+    dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyP' }));
+    dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyP' }));
+    await sleep(300);
+    const paused = shown('pause') && ['resume', 'savegame', 'opensettings', 'tomenu', 'quit'].every(shown);
+    ${$('savegame')}.click();
+    await sleep(300);
+    const rows = document.querySelectorAll('#slots [data-slot]').length;
+    document.querySelector('#slots [data-slot="1"]').click();
+    await sleep(400);
+    const msg = document.querySelector('#slots [data-msg]')?.textContent;
+    const slot1 = (await window.deeperBloom.saves.list())[0];
+    await sleep(900);
+    const backToPause = !shown('slots') && shown('pause');
+    ${$('opensettings')}.click();
+    await sleep(200);
+    const tabs = {};
+    for (const b of document.querySelectorAll('#settings [data-tab]')) {
+      document.querySelector('#settings [data-tab="' + b.dataset.tab + '"]').click();
+      await sleep(50);
+      tabs[b.dataset.tab] = document.querySelector('#settings [data-body]').children.length;
+    }
+    document.querySelector('#settings [data-tab="controls"]').click();
+    document.querySelector('#settings [data-bind="forward"]').click();
+    dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyI' }));
+    const rebound = document.querySelector('#settings [data-bind="forward"]').textContent;
+    document.querySelector('#settings [data-reset="controls"]').click();
+    const reset = document.querySelector('#settings [data-bind="forward"]').textContent;
+    document.querySelector('#settings [data-back]').click();
+    await sleep(100);
+    const settingsBack = !shown('settings') && shown('pause');
+    ${$('tomenu')}.click();
+    await sleep(300);
+    const title = shown('title') && !document.querySelector('[data-menu="continue"]').hidden;
+    return { paused, rows, msg, slot1: !!slot1?.summary, backToPause, tabs, rebound, reset, settingsBack, title };`);
+  check('P opens the pause menu with all its buttons', menus.paused);
+  check('Save game saves to a slot', menus.rows === 3 && menus.slot1 && /slot 1/.test(menus.msg), menus.msg);
+  check('the slots close back to the pause menu', menus.backToPause);
+  check('Options has four tabs that all render', Object.keys(menus.tabs).length === 4 && Object.values(menus.tabs).every((n) => n > 0), JSON.stringify(menus.tabs));
+  check('keys can be rebound and reset', menus.rebound === 'I' && menus.reset === 'W', `${menus.rebound} → ${menus.reset}`);
+  check('Options goes back to the pause menu', menus.settingsBack);
+  check('Main menu goes to the title, now with Continue', menus.title);
+
+  // Loading a slot reloads the page onto the "Ready to dive" card.
+  await run(`
+    document.querySelector('[data-menu="load"]').click();
+    await new Promise((r) => setTimeout(r, 300));
+    setTimeout(() => document.querySelector('#slots [data-slot="1"]').click(), 50);
+    return true;`);
+  await wait(3500);
+  const loaded = await run(`
+    const ready = !document.getElementById('pause').hidden && document.getElementById('pause-title').textContent;
+    document.getElementById('resume').click();
+    await new Promise((r) => setTimeout(r, 400));
+    return { ready, hud: !document.getElementById('hud').hidden, lumen: db.builder && Number(document.getElementById('lumen').textContent.replace(/,/g, '')) };`);
+  check('Load game reloads onto the ready card', loaded.ready === 'Ready to dive', String(loaded.ready));
+  check('Dive from the ready card plays the loaded game', loaded.hud && loaded.lumen >= 20, `${loaded.lumen} Lumen`);
 
   check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } catch (e) {
