@@ -696,8 +696,7 @@ function updateVisor(dt) {
     sysClock = 0.3;
     for (const s of systems.update()) {
       hudFx.restore(s);
-      toast(`System restored: ${s.name}`, { color: '#5CF2D6' });
-      chime();
+      toast(`System restored: ${s.name}`, { color: '#5CF2D6' }); // hudFx plays the reboot sound
       save();
     }
   }

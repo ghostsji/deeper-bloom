@@ -1,4 +1,5 @@
 import { SYSTEMS } from './hud-systems.js';
+import { glitchSound, staticSound, rebootSound } from './audio.js';
 
 // The visor HUD: corner brackets, scanlines and cracked glass over the view, glitches on the
 // systems the flood damaged, the compass (once Navigation is back) and the boot-up flash when a
@@ -119,6 +120,7 @@ export function createHudFx(root, systems) {
       el.classList.remove('boot'); void el.offsetWidth; el.classList.add('boot');
       setTimeout(() => el.classList.remove('boot'), 1400);
     });
+    rebootSound();
     const f = visor.querySelector('.v-flash');
     f.classList.remove('on'); void f.offsetWidth; f.classList.add('on');
     setParts();
@@ -141,6 +143,9 @@ export function createHudFx(root, systems) {
           b.until = t + 0.12 + Math.random() * 0.3;
           b.next = b.until + (2 + Math.random() * 6) / (0.4 + damage);
           for (const q of PARTS[s.id]) root.querySelectorAll(q).forEach((el) => el.classList.add('glitch'));
+          // Heard only while you're playing, and only for parts you can see (the compass when it's
+          // offline, Echo's subtitles while she's talking...).
+          if (info.playing && PARTS[s.id].some((q) => [...root.querySelectorAll(q)].some((el) => el.offsetParent && getComputedStyle(el).opacity > 0.1))) glitchSound(0.6 + damage * 0.4);
           for (const [el, tx] of texts) if (tx.sys === s.id) paint(el);
         } else if (b.until && t >= b.until) {
           b.until = 0;
@@ -151,6 +156,7 @@ export function createHudFx(root, systems) {
       // The whole visor fuzzes now and then, less as it's repaired.
       if (info.playing && damage > 0 && t >= nextStatic) {
         staticUntil = t + 0.08 + Math.random() * 0.15;
+        staticSound(staticUntil - t);
         nextStatic = staticUntil + (3 + Math.random() * 9) / damage;
       }
       visor.classList.toggle('fuzz', t < staticUntil);

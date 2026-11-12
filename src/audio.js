@@ -20,7 +20,7 @@ let theme = THEMES.reef;
 
 const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
-let ctx = null, master, water, music, sfx, echoIn, ui;
+let ctx = null, master, water, music, sfx, echoIn, ui, visor;
 // The player's volumes (Settings → Sound), each 0..1, on top of the mix levels below.
 let vol = { master: 1, music: 1, sfx: 1, ui: 1, muted: false };
 let paused = false;
@@ -36,6 +36,7 @@ export function initAudio() {
   music = ctx.createGain(); music.connect(water);
   sfx = ctx.createGain(); sfx.connect(water);
   ui = ctx.createGain(); ui.connect(master); // menu sounds skip the water filter
+  visor = ctx.createGain(); visor.connect(master); // the visor's electronics are in your helmet: not muffled either
   applyVolumes(true);
 
   // A long feedback echo for bells and pops, so everything rings like it's underwater.
@@ -192,6 +193,7 @@ function applyVolumes(now = false) {
   set(master, vol.muted ? 0 : MIX.master * vol.master * (paused ? MIX.pausedDip : 1));
   set(music, MIX.music * vol.music);
   set(sfx, MIX.sfx * vol.sfx);
+  set(visor, MIX.sfx * vol.sfx); // follows the effects volume
   set(ui, vol.ui);
 }
 
@@ -346,3 +348,69 @@ export const audioState = () => ({
   running: ctx?.state === 'running', music: Object.keys(THEMES).find((k) => THEMES[k] === theme),
   volumes: { ...vol }, masterGain: master ? +master.gain.value.toFixed(3) : null,
 });
+
+// ---- Visor electronics -------------------------------------------------------------
+// The flood-damaged HUD: crackles when a system glitches, fuzz when the visor shorts out,
+// and a power-up when a system comes back. Played dry in the helmet (see visor above).
+
+// White noise through a filter into the visor bus, with a choppy gate for that broken feel.
+function crackle(t, dur, { freq = 2500, q = 0.8, gain = 0.12, chop = 0.025 } = {}) {
+  const len = Math.ceil(ctx.sampleRate * dur), buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+  const seg = Math.max(1, Math.floor(ctx.sampleRate * chop));
+  let on = 1;
+  for (let i = 0; i < len; i++) {
+    if (i % seg === 0) on = Math.random() < 0.65 ? 1 : 0.08;
+    d[i] = (Math.random() * 2 - 1) * on;
+  }
+  const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+  src.buffer = buf; f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+  g.gain.setValueAtTime(gain, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(f); f.connect(g); g.connect(visor);
+  src.start(t); src.stop(t + dur);
+}
+// A short electronic tone into the visor bus, optionally gliding.
+function beep(t, from, to, dur, { type = 'square', gain = 0.04 } = {}) {
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(from, t);
+  if (to !== from) o.frequency.exponentialRampToValueAtTime(to, t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(gain, t + 0.005);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(visor);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+
+// A system glitching: a choppy crackle and a stuttering data blip. Varies every time.
+let lastGlitch = 0;
+export function glitchSound(strength = 1) {
+  // Spaced out (and only some bursts are heard) so a badly damaged visor crackles, not buzzes.
+  if (!ctx || ctx.currentTime - lastGlitch < 0.6 || Math.random() < 0.4) return;
+  const t = ctx.currentTime;
+  lastGlitch = t;
+  const dur = 0.08 + Math.random() * 0.16;
+  crackle(t, dur, { freq: 1800 + Math.random() * 3500, gain: 0.07 * strength });
+  const f = 300 + Math.random() * 900;
+  for (let i = 0, n = 1 + ((Math.random() * 3) | 0); i < n; i++) beep(t + i * 0.035, f * (1 + i * 0.5), f * 0.6, 0.03, { gain: 0.018 * strength });
+}
+
+// The whole visor shorting out: a burst of wideband static with a low buzz under it.
+export function staticSound(dur = 0.18) {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  crackle(t, dur + 0.05, { freq: 3200, q: 0.3, gain: 0.09, chop: 0.012 });
+  beep(t, 58, 58, dur + 0.05, { type: 'sawtooth', gain: 0.03 });
+}
+
+// A system rebooting: relay clicks, a rising power-up sweep, then two confirm tones.
+export function rebootSound() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  for (let i = 0; i < 3; i++) crackle(t + i * 0.07, 0.025, { freq: 4000, q: 2, gain: 0.08, chop: 1 });
+  beep(t + 0.2, 90, 1400, 0.55, { type: 'sawtooth', gain: 0.025 });
+  beep(t + 0.2, 180, 2800, 0.55, { type: 'sine', gain: 0.03 });
+  crackle(t + 0.2, 0.5, { freq: 6000, q: 0.5, gain: 0.025, chop: 0.004 });
+  beep(t + 0.82, 880, 880, 0.12, { type: 'triangle', gain: 0.06 });
+  beep(t + 0.96, 1320, 1320, 0.3, { type: 'triangle', gain: 0.06 });
+}

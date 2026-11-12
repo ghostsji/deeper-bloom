@@ -151,6 +151,8 @@ try {
   // The flood-damaged visor: scanning Echo and gathering 60 polyps (above) restore two systems.
   const hud = await run(`
     await new Promise((r) => setTimeout(r, 800));
+    const A = await import('./src/audio.js');
+    A.glitchSound(); A.staticSound(); A.rebootSound(); // the visor's sounds play without errors
     return {
       cracks: !!document.querySelector('#visor .v-cracks path'),
       navOff: document.getElementById('compass').classList.contains('offline'),
