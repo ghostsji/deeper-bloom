@@ -1,0 +1,12 @@
+# Dependencies (npm install restores them)
+node_modules/
+
+# Voice generation scratch space (tools/make-voices.mjs)
+assets/voice/.cache/
+
+# Editors and OS
+.vscode/
+.idea/
+*.log
+Thumbs.db
+.DS_Store

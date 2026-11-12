@@ -1,0 +1,19 @@
+{
+  "name": "deeper-bloom",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Deeper Bloom: a first-person dive through a glowing reef. Sequel to Deep Bloom. Desktop only.",
+  "scripts": {
+    "start": "python -m http.server 5174",
+    "desktop": "electron .",
+    "voices": "node tools/make-voices.mjs"
+  },
+  "dependencies": {
+    "msedge-tts": "2.1.0",
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "electron": "^45.1.0"
+  },
+  "main": "electron/main.cjs"
+}

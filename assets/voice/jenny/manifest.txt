@@ -1,0 +1,24 @@
+# Echo's lines for Deeper Bloom. Voice: en-US-JennyNeural, rate -18%, pitch -2Hz
+echo_arrive_0.mp3 | You came back down. Swim to the light in the middle of the reef. I'm there.
+echo_meet_0.mp3 | There you are. Last time you saw the reef from above, as a pattern of light. Down here it's bigger than you thought.
+echo_meet_1.mp3 | The polyps still glow. Swim through them to gather their Lumen. The reef brightens with every light you carry.
+echo_meet_2.mp3 | Further down, the Kelp Forest is waiting. Not yet. First, learn to swim again.
+echo_ten_0.mp3 | That's it. Can you feel the water getting clearer?
+echo_surface_0.mp3 | The surface. It burned once, remember? Now it's only night and water.
+echo_surface_1.mp3 | Build something that floats. Aim at the water and spend your Lumen. The reef will light it for you.
+echo_build_0.mp3 | It floats. Every raft is a little more of the sea that's ours again.
+echo_lens_0.mp3 | That's the Echo Lens. Everything down here has a story. Hold your gaze on it and the lens will hear it.
+echo_firstEntry_0.mp3 | You learned something true about the reef. Take it to a research station on your raft and put it to use.
+echo_phone_0.mp3 | Your phone still works down here. Everything you build and learn is in it. Press Tab when you need it.
+echo_station_0.mp3 | A place to think. Bring what you learn down there back here.
+echo_scanEcho_0.mp3 | You scanned me? Fair. I'd have done the same.
+echo_breath_0.mp3 | Mind your breath. The surface is always closer than it looks. Head up when the blue bar runs low.
+echo_hungry_0.mp3 | You're hungry. Silverfin drift near the coral. Glide in slowly and grab one. Kelp works too, if you're desperate.
+echo_catch_0.mp3 | Raw fish will keep you going, barely. Build a cook fire on your raft and press F at it.
+echo_cooked_0.mp3 | Better. Press R to eat when you need it.
+echo_blackout_0.mp3 | You went dark. I pulled you back up. Your satchel is where you fell. Look for the gold ring.
+echo_harpoon_0.mp3 | Your harpoon. Press 1 to raise it, left-click to fire. Every shot wears it a little. A workbench and some kelp will fix it.
+echo_eel_0.mp3 | That eel. The blight got into it. It isn't cruel, it's sick. Keep your distance, or keep your harpoon ready.
+echo_eelDown_0.mp3 | It's resting now. The fire's gone out of it. The meat's safe once it's cooked.
+echo_broken_0.mp3 | Your harpoon is spent. Fix it at a workbench on your raft with two strands of kelp.
+echo_bloom_0.mp3 | The Shallows are in full bloom. Deep Bloom remembers. Now we go deeper.

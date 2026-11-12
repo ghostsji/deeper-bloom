@@ -1,0 +1,191 @@
+/* Palette carried over from Deep Bloom (Shallows). */
+:root {
+  --ground: #061A24;
+  --deep: #03111A;
+  --panel: #0D2A36;
+  --line: #1F4D5C;
+  --text: #E6F4F2;
+  --sub: #B5D2D4;
+  --muted: #9CC0C4;
+  --cyan: #5CF2D6;
+  --pink: #FF8FD0;
+  --gold: #FFC46B;
+  --track: #163B49;
+  --pinkpanel: #2A1530;
+  --goldpanel: #2B2410;
+  --grey-bg: #0A1F28;
+  --grey-fg: #7E9CA1;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--deep); color: var(--text); font-family: 'DM Sans', system-ui, sans-serif; }
+canvas#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+[hidden] { display: none !important; }
+
+h1, h2, .lumen, .depth, .eyebrow { font-family: 'Unbounded', sans-serif; }
+
+/* ---- Menus ---- */
+.screen { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 30%, rgba(13, 42, 54, .55), rgba(3, 17, 26, .92)); z-index: 10; }
+.card { text-align: center; max-width: 520px; padding: 40px 36px; border: 1px solid var(--line); border-radius: 22px; background: rgba(13, 42, 54, .78); box-shadow: 0 0 80px rgba(92, 242, 214, .12); }
+.eyebrow { margin: 0 0 8px; font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: var(--cyan); }
+h1 { margin: 0 0 12px; font-size: 52px; font-weight: 800; letter-spacing: -.01em; text-shadow: 0 0 28px rgba(92, 242, 214, .55); }
+h2 { margin: 0 0 18px; font-size: 26px; font-weight: 600; }
+.lede { margin: 0 0 26px; color: var(--sub); font-size: 17px; line-height: 1.5; }
+.small { margin: 18px 0 0; color: var(--muted); font-size: 13px; }
+button.primary { font: 600 18px 'Unbounded', sans-serif; color: var(--deep); background: var(--cyan); border: 0; border-radius: 999px; padding: 14px 44px; cursor: pointer; box-shadow: 0 0 30px rgba(92, 242, 214, .45); transition: transform .15s, box-shadow .15s; }
+button.primary:hover { transform: translateY(-1px) scale(1.03); box-shadow: 0 0 44px rgba(92, 242, 214, .7); }
+
+/* ---- HUD ---- */
+#hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+.lumen { position: absolute; top: 24px; left: 28px; display: flex; align-items: baseline; gap: 10px; font-size: 30px; font-weight: 600; text-shadow: 0 0 16px rgba(92, 242, 214, .6); }
+.lumen small { font: 500 13px 'DM Sans', sans-serif; color: var(--muted); letter-spacing: .12em; text-transform: uppercase; }
+.lumen .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 14px var(--cyan); align-self: center; }
+.depth { position: absolute; top: 30px; right: 30px; font-size: 18px; color: var(--sub); }
+.crosshair { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(230, 244, 242, .7); box-shadow: 0 0 8px rgba(92, 242, 214, .8); }
+.subtitle { position: absolute; left: 50%; bottom: 26%; transform: translateX(-50%); max-width: min(760px, 80vw); padding: 14px 22px; border-radius: 14px; background: rgba(3, 17, 26, .6); color: var(--text); font-size: 19px; line-height: 1.45; text-align: center; opacity: 0; transition: opacity .6s; }
+.subtitle.show { opacity: 1; }
+.subtitle b { color: #F4EEE6; font-family: 'Unbounded', sans-serif; font-weight: 600; font-size: 14px; letter-spacing: .1em; margin-right: 8px; }
+.hint { position: absolute; left: 50%; bottom: 28px; transform: translateX(-50%); color: var(--muted); font-size: 14px; letter-spacing: .04em; transition: opacity 1.5s; }
+.hint.gone { opacity: 0; }
+
+/* ---- Build bar (at the surface) ---- */
+.buildbar { position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%); text-align: center; }
+.buildbar p { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+.slots { display: flex; gap: 10px; justify-content: center; }
+.slot { min-width: 104px; white-space: nowrap; padding: 10px 14px 9px; border: 1px solid var(--line); border-radius: 12px; background: rgba(3, 17, 26, .65); color: var(--text); font-weight: 600; font-size: 15px; }
+.slot kbd { display: inline-block; margin-right: 8px; padding: 0 6px; border-radius: 5px; background: var(--line); color: var(--sub); font: 600 12px 'Unbounded', sans-serif; }
+.slot span { display: block; margin-top: 3px; color: var(--gold); font-weight: 500; font-size: 12px; }
+.slot.on { border-color: var(--cyan); box-shadow: 0 0 18px rgba(92, 242, 214, .35); }
+.slot.poor span { color: #ff8f8f; }
+.locknote { position: absolute; top: 74px; left: 50%; transform: translateX(-50%); padding: 8px 16px; border-radius: 10px; background: rgba(42, 21, 48, .8); color: var(--pink); font-size: 14px; }
+button.secondary { display: block; margin: 14px auto 0; font: 500 15px 'DM Sans', sans-serif; color: var(--sub); background: none; border: 1px solid var(--line); border-radius: 999px; padding: 9px 26px; cursor: pointer; }
+button.secondary:hover { color: var(--text); border-color: var(--cyan); }
+
+/* ---- Data, Echo Lens, prompts ---- */
+.datacount { position: absolute; top: 66px; left: 30px; display: flex; align-items: baseline; gap: 10px; font: 600 20px 'Unbounded', sans-serif; color: var(--text); }
+.datacount small { font: 500 12px 'DM Sans', sans-serif; color: var(--muted); letter-spacing: .12em; text-transform: uppercase; }
+.datacount .dot { width: 10px; height: 10px; border-radius: 2px; background: var(--gold); box-shadow: 0 0 10px var(--gold); align-self: center; transform: rotate(45deg); }
+.lens { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(92, 242, 214, .16) 75%, rgba(3, 17, 26, .7) 100%); }
+.scanring { --p: 0; position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%;
+  background: conic-gradient(var(--cyan) calc(var(--p) * 360deg), rgba(92, 242, 214, .18) 0);
+  -webkit-mask: radial-gradient(circle, transparent 27px, #000 28px); mask: radial-gradient(circle, transparent 27px, #000 28px); }
+.scanlabel { position: absolute; left: 50%; top: calc(50% + 44px); transform: translateX(-50%); padding: 6px 14px; border-radius: 10px; background: rgba(3, 17, 26, .7); color: var(--sub); font-size: 14px; text-align: center; white-space: nowrap; }
+.scanlabel b { display: block; color: var(--cyan); font: 600 14px 'Unbounded', sans-serif; }
+.scanlabel.known b { color: var(--muted); }
+.lenshint { position: absolute; top: 112px; left: 50%; transform: translateX(-50%); color: var(--cyan); font: 600 12px 'Unbounded', sans-serif; letter-spacing: .14em; }
+.prompt { position: absolute; left: 50%; top: calc(50% + 40px); transform: translateX(-50%); padding: 7px 14px; border-radius: 10px; background: rgba(3, 17, 26, .7); font-weight: 600; }
+.prompt kbd, .slot kbd { font-family: 'Unbounded', sans-serif; }
+.prompt kbd { margin-right: 8px; padding: 1px 7px; border-radius: 5px; background: var(--cyan); color: var(--deep); font-size: 12px; }
+.toast { position: absolute; top: 24px; left: 50%; transform: translate(-50%, -12px); padding: 10px 18px; border-radius: 12px; background: rgba(43, 36, 16, .9); color: var(--gold); font-weight: 600; opacity: 0; transition: opacity .4s, transform .4s; }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+
+/* ---- Survival HUD ---- */
+.stats { position: absolute; left: 28px; bottom: 28px; display: grid; gap: 7px; width: 220px; }
+.stat { display: grid; grid-template-columns: 58px 1fr; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+.bar { --v: 1; height: 8px; border-radius: 99px; background: rgba(3, 17, 26, .7); border: 1px solid var(--line); overflow: hidden; position: relative; }
+.bar::after { content: ''; position: absolute; inset: 0; width: calc(var(--v) * 100%); border-radius: 99px; transition: width .2s; }
+.bar.breath::after { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+.bar.health::after { background: var(--pink); box-shadow: 0 0 8px var(--pink); }
+.bar.food::after { background: var(--gold); box-shadow: 0 0 8px var(--gold); }
+.bag { position: absolute; right: 28px; bottom: 28px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: 360px; }
+.bag span { padding: 5px 10px; border-radius: 10px; background: rgba(3, 17, 26, .7); border: 1px solid var(--line); font-size: 13px; }
+.bag span b { margin-left: 7px; color: var(--gold); font-family: 'Unbounded', sans-serif; font-size: 12px; }
+.bag small { width: 100%; text-align: right; color: var(--muted); font-size: 12px; }
+.danger { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, transparent 40%, rgba(60, 0, 20, .85) 100%); transition: opacity .3s; }
+.fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity 1.4s; z-index: 20; }
+.fade.show { opacity: 1; }
+
+/* ---- The phone: Deep Bloom's app in a dive case ---- */
+.phone { position: fixed; inset: 0; z-index: 12; display: flex; align-items: flex-end; justify-content: center; background: rgba(3, 17, 26, 0); transition: background .25s; }
+.phone.up { background: rgba(3, 17, 26, .45); }
+.phone-case { position: relative; width: min(400px, 92vw); height: min(780px, 90vh); margin-bottom: 3vh; padding: 14px; border-radius: 48px;
+  background: linear-gradient(160deg, #26343a, #121b1f 60%, #0b1114); border: 2px solid #34474e;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .6), inset 0 0 0 4px #0b1114, 0 0 60px rgba(92, 242, 214, .12);
+  transform: translateY(110%) rotate(-3deg); transition: transform .26s cubic-bezier(.2, .8, .3, 1); }
+.phone.up .phone-case { transform: translateY(0) rotate(-3deg); }
+/* Rubber corner bumpers of the dive case. */
+.phone-case::before, .phone-case::after { content: ''; position: absolute; left: -6px; right: -6px; height: 70px; border: 6px solid #3a4f57; border-radius: 52px; pointer-events: none; }
+.phone-case::before { top: -6px; border-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.phone-case::after { bottom: -6px; border-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
+.phone-screen { height: 100%; border-radius: 36px; overflow: hidden; display: flex; flex-direction: column; background: var(--ground); position: relative; }
+.phone-screen::before { content: ''; position: absolute; top: 9px; left: 50%; width: 90px; height: 24px; margin-left: -45px; border-radius: 12px; background: #05090b; z-index: 2; }
+.phone-hint { position: absolute; bottom: 8px; left: 0; right: 0; text-align: center; color: var(--muted); font-size: 13px; opacity: 0; transition: opacity .3s; }
+.phone.up .phone-hint { opacity: 1; }
+
+/* Inside the phone: Deep Bloom's app UI. */
+.phone-hud { display: flex; justify-content: space-between; align-items: flex-start; padding: 44px 18px 10px; }
+.phone .label { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.phone .label.pad { padding: 2px 4px 0; }
+.phone .big { font-family: 'Unbounded', sans-serif; font-size: 32px; font-weight: 700; line-height: 1.1; }
+.phone .cyan { color: var(--cyan); }
+.phone .muted { color: var(--muted); }
+.phone .small { font-size: 12px; }
+.phone .sub { margin: 0; color: var(--sub); font-size: 13px; line-height: 1.45; padding: 0 4px; }
+.phone-chips { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.phone .chip { padding: 6px 12px; border-radius: 14px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.phone .chip.pink { background: var(--pinkpanel); color: var(--pink); }
+.phone .chip.gold { background: var(--goldpanel); color: var(--gold); }
+.phone-body { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; padding: 6px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+.phone .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; width: 100%; }
+.phone .plist { display: flex; flex-direction: column; gap: 10px; }
+.phone .pcard { display: block; width: 100%; text-align: left; padding: 14px 16px; border-radius: 18px; border: 1.5px solid var(--line); background: var(--panel); color: var(--text); font: inherit; }
+.phone .pcard b { font-size: 15px; }
+.phone .pcard p { margin: 6px 0 0; color: var(--sub); font-size: 13px; line-height: 1.4; }
+.phone .pcard.piece { cursor: pointer; transition: border-color .15s, transform .1s; }
+.phone .pcard.piece:hover { border-color: var(--cyan); }
+.phone .pcard.piece:active { transform: scale(.98); }
+.phone .pcard.on { border-color: var(--cyan); box-shadow: 0 0 18px rgba(92, 242, 214, .25); }
+.phone .pcard.done { border-color: rgba(92, 242, 214, .45); }
+.phone .pcard .cost { color: var(--gold); font-size: 13px; }
+.phone .pcard.poor .cost { color: #ff8f8f; }
+.phone .needs { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.phone .needs .chip { padding: 3px 10px; font-size: 12px; }
+.phone .chip.ok { background: rgba(92, 242, 214, .14); color: var(--cyan); }
+.phone .chip.dim { background: var(--grey-bg); color: var(--grey-fg); }
+.phone .owned { color: var(--cyan); font-weight: 700; font-size: 13px; }
+.phone .note { margin: 0; padding: 10px 14px; border-radius: 14px; background: var(--goldpanel); color: var(--gold); font-size: 13px; }
+.phone .btn { min-height: 48px; border-radius: 24px; border: 1.5px solid var(--line); background: var(--panel); color: var(--text); font: 700 15px 'DM Sans', sans-serif; cursor: pointer; }
+.phone .btn.small { min-height: 36px; padding: 0 16px; border: 0; background: var(--cyan); color: #04211C; font-size: 13px; }
+.phone .btn:disabled { background: var(--grey-bg); color: var(--grey-fg); border: 1.5px solid var(--track); cursor: default; }
+.phone .bar { height: 10px; border-radius: 5px; background: var(--track); overflow: hidden; }
+.phone .bar .fill { height: 100%; border-radius: 5px; background: var(--cyan); }
+.phone .fill.pink-bg { background: var(--pink); }
+.phone .fill.gold-bg { background: var(--gold); }
+.phone .meter { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 16px; background: var(--panel); }
+.phone .meter b { font-family: 'Unbounded', sans-serif; font-size: 15px; }
+.phone .collection { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 18px; background: var(--panel); border: 1.5px solid var(--line); }
+.phone .cgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.phone .cchip { min-height: 64px; border-radius: 14px; border: 2px solid var(--line); background: var(--ground); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 6px 2px; text-align: center; }
+.phone .cchip i { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 8px currentColor; }
+.phone .cchip b { font-size: 11px; line-height: 1.2; }
+.phone .cchip span { font-size: 11px; color: var(--sub); }
+.phone .cchip.dim { opacity: .55; }
+.phone-tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); background: var(--deep); padding: 8px 8px 14px; flex-shrink: 0; }
+.phone-tabs button { min-height: 52px; font-size: 11px !important; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; background: none; border: 0; color: var(--muted); font: 700 12px 'DM Sans', sans-serif; cursor: pointer; }
+.phone-tabs button[aria-current] { color: var(--cyan); }
+#buildtip { min-height: 1em; }
+
+/* ---- Harpoon wear ---- */
+.gear { position: absolute; right: 28px; bottom: 96px; display: grid; grid-template-columns: auto 120px auto; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 12px; background: rgba(3, 17, 26, .7); border: 1px solid var(--line); font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.gear .bar::after { background: var(--sub); }
+.gear .bar.low::after { background: #ff8f8f; }
+.gear b { font-family: 'Unbounded', sans-serif; color: var(--text); letter-spacing: 0; }
+
+/* ---- Settings ---- */
+.card.settings { width: min(560px, calc(100vw - 32px)); max-height: 92vh; overflow-y: auto; text-align: left; scrollbar-color: var(--line) transparent; scrollbar-width: thin; }
+.card.settings h2, .card.settings .eyebrow { text-align: center; }
+.srow { display: grid; gap: 6px; margin: 0 0 12px; font-size: 14px; color: var(--sub); }
+.srow span { display: flex; justify-content: space-between; }
+.srow b { color: var(--text); font-family: 'Unbounded', sans-serif; font-size: 12px; font-weight: 600; }
+.srow select { font: 500 14px 'DM Sans', sans-serif; color: var(--text); background: var(--deep); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; }
+.srow input[type=range] { width: 100%; accent-color: var(--cyan); }
+.sgroup { margin: 18px 0 10px; color: var(--cyan); font: 600 12px 'Unbounded', sans-serif; letter-spacing: .14em; text-transform: uppercase; }
+.sbtns { display: flex; gap: 10px; justify-content: center; align-items: center; margin-top: 8px; }
+.sbtns .secondary { margin: 0; }
+button.primary.small { font-size: 14px; padding: 10px 24px; }
+.scheck { display: flex; align-items: center; gap: 10px; margin: 2px 0 6px; color: var(--sub); font-size: 14px; cursor: pointer; }
+.scheck input { accent-color: var(--cyan); width: 16px; height: 16px; }
+.phone .chip.cyan { background: rgba(92, 242, 214, .14); color: var(--cyan); }
+.phone .gold { color: var(--gold); }
+.phone .pcard.locked { opacity: .55; }

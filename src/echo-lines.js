@@ -1,0 +1,31 @@
+// Everything Echo says, by moment. Each line is also a bundled voice file,
+// assets/voice/echo_<key>_<n>.mp3 (made by `npm run voices`).
+export const ECHO_LINES = {
+  arrive: ['You came back down. Swim to the light in the middle of the reef. I\'m there.'],
+  meet: [
+    'There you are. Last time you saw the reef from above, as a pattern of light. Down here it\'s bigger than you thought.',
+    'The polyps still glow. Swim through them to gather their Lumen. The reef brightens with every light you carry.',
+    'Further down, the Kelp Forest is waiting. Not yet. First, learn to swim again.',
+  ],
+  ten: ['That\'s it. Can you feel the water getting clearer?'],
+  surface: [
+    "The surface. It burned once, remember? Now it's only night and water.",
+    'Build something that floats. Aim at the water and spend your Lumen. The reef will light it for you.',
+  ],
+  build: ["It floats. Every raft is a little more of the sea that's ours again."],
+  lens: ["That's the Echo Lens. Everything down here has a story. Hold your gaze on it and the lens will hear it."],
+  firstEntry: ['You learned something true about the reef. Take it to a research station on your raft and put it to use.'],
+  phone: ["Your phone still works down here. Everything you build and learn is in it. Press Tab when you need it."],
+  station: ['A place to think. Bring what you learn down there back here.'],
+  scanEcho: ["You scanned me? Fair. I'd have done the same."],
+  breath: ['Mind your breath. The surface is always closer than it looks. Head up when the blue bar runs low.'],
+  hungry: ["You're hungry. Silverfin drift near the coral. Glide in slowly and grab one. Kelp works too, if you're desperate."],
+  catch: ['Raw fish will keep you going, barely. Build a cook fire on your raft and press F at it.'],
+  cooked: ['Better. Press R to eat when you need it.'],
+  blackout: ['You went dark. I pulled you back up. Your satchel is where you fell. Look for the gold ring.'],
+  harpoon: ['Your harpoon. Press 1 to raise it, left-click to fire. Every shot wears it a little. A workbench and some kelp will fix it.'],
+  eel: ["That eel. The blight got into it. It isn't cruel, it's sick. Keep your distance, or keep your harpoon ready."],
+  eelDown: ["It's resting now. The fire's gone out of it. The meat's safe once it's cooked."],
+  broken: ['Your harpoon is spent. Fix it at a workbench on your raft with two strands of kelp.'],
+  bloom: ['The Shallows are in full bloom. Deep Bloom remembers. Now we go deeper.'],
+};

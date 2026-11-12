@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Deeper Bloom</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Unbounded:wght@400;600;800&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./node_modules/three/build/three.module.js",
+        "three/addons/": "./node_modules/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="view"></canvas>
+
+  <div id="hud" hidden>
+    <div class="lumen"><span class="dot"></span><span id="lumen">0</span><small>Lumen</small></div>
+    <div class="datacount"><span class="dot"></span><span id="data">0</span><small>Data</small></div>
+    <div class="depth" id="depth">0 m</div>
+    <div class="crosshair"></div>
+    <div id="lens" class="lens" hidden>
+      <div id="scanring" class="scanring"></div>
+      <div id="scanlabel" class="scanlabel" hidden></div>
+      <div class="lenshint">ECHO LENS · hold left mouse to scan · let go of right mouse to lower</div>
+    </div>
+    <div id="prompt" class="prompt" hidden></div>
+    <div id="danger" class="danger"></div>
+    <div class="stats">
+      <div class="stat" id="stat-breath"><span>Breath</span><div class="bar breath" id="bar-breath"></div></div>
+      <div class="stat"><span>Health</span><div class="bar health" id="bar-health"></div></div>
+      <div class="stat"><span>Food</span><div class="bar food" id="bar-food"></div></div>
+    </div>
+    <div id="bag" class="bag"></div>
+    <div id="gear" class="gear" hidden></div>
+    <div id="toast" class="toast"></div>
+    <div id="subtitle" class="subtitle"></div>
+    <div id="locknote" class="locknote" hidden>This window won't let the game hold the mouse in the centre. Click to try again, or play in the desktop app (npm run desktop).</div>
+    <div id="buildbar" class="buildbar" hidden>
+      <div id="buildslots" class="slots"></div>
+      <p id="buildtip"></p>
+    </div>
+    <div id="hint" class="hint">WASD swim · Mouse look · Space rise · Ctrl sink · Q/E turn · Shift dash · Tab phone · 1 harpoon · Hold right mouse Echo Lens · Click grab fish/kelp · R eat · Esc or P pause</div>
+  </div>
+
+  <div id="title" class="screen">
+    <div class="card">
+      <p class="eyebrow">Deep Bloom 2</p>
+      <h1>Deeper Bloom</h1>
+      <p class="lede">The tide ran backwards. This time you go down yourself.</p>
+      <button id="dive" class="primary">Dive</button>
+      <p class="small">Plays fullscreen with mouse and keyboard. Headphones recommended.</p>
+    </div>
+  </div>
+
+  <div id="pause" class="screen" hidden>
+    <div class="card">
+      <p class="eyebrow">Paused</p>
+      <h2>Holding your breath</h2>
+      <button id="resume" class="primary">Resume</button>
+      <button id="opensettings" class="secondary">Settings</button>
+      <button id="quit" class="secondary" hidden>Quit to desktop</button>
+      <p class="small">WASD swim · Mouse look · Space rise · Ctrl sink · Q/E turn · Shift dash · Tab phone · 1 harpoon · Hold RMB lens · F use · R eat</p>
+    </div>
+  </div>
+
+  <div id="phone" class="phone" hidden></div>
+
+  <div id="settings" class="screen" hidden></div>
+
+  <div id="fade" class="fade"></div>
+
+  <div id="mobile" class="screen" hidden>
+    <div class="card">
+      <p class="eyebrow">Desktop only</p>
+      <h2>Deeper Bloom needs a mouse and keyboard</h2>
+      <p class="lede">Open it on a computer. On your phone, Deep Bloom is still waiting for you.</p>
+    </div>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
