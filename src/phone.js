@@ -54,6 +54,9 @@ const GUIDES = [
   ['Wrecks and upgrades', () => 'Two boats went down in the flood. Each holds a visor upgrade (white-banded pod) and one of Echo\'s logs. Upgrades: the Pressure plate (in the outpost\'s vault) lets you go 5 m deeper before the glass strains, the Spark guard halves shock damage, and the Anti-fog coating halves fogging.'],
   ['Blight, tears and your ears', () => `An eel bite smears orange blight on your visor. It spreads, and the readouts it covers go dark: scrub it off with ${k('use')} at a research station, or research the UV flush so holding ${k('purge')} burns it off. A bite can also tear your suit (up to three tears): cold water gets in, the glass fogs faster and you slowly lose health until you patch each tear with 1 kelp at a workbench. Dropping fast builds pressure in your ears (a whine, muffled sound, the edges pulsing red); press ${k('equalise')} to equalise, or it starts to hurt. After a leak the visor's electronics stay wet for a while and short out: the compass mirrors, your bars swap places, the depth gauge lies.`],
   ['Night, currents, vents and the deep', () => 'A day lasts 8 minutes. At night the water goes almost black: your visor light comes on (it costs battery), glowing things become your best light, eels spot you from further away, and the big shape passes more often. Currents along the reef\'s east and west edges push you sideways (watch the drifting streaks). South of the reef a sinkhole drags you down into deep, high-pressure water: swim hard up and out. Gas vents burst every few seconds: swim into the bubbles for breath, but they fog your visor and throw you upwards.'],
+  ['Echo\'s signal and her pearl', () => `Echo can only reach you so far from her pearl. Further out her subtitles break up, her tips arrive late, and past a certain range she goes quiet (ECHO bars, top left). Glow buoys you build relay her signal for another 35 m around them. Bring Lumen to her pearl and press ${k('use')} to grow it (25, 50, then 100 Lumen): each size reaches 25 m further and makes the whole reef glow brighter.`],
+  ['The outpost\'s rooms', () => `Once the outpost has power, its rooms work, for as long as the generator has fuel: feed it kelp with ${k('use')} (1 kelp = 20%). The lab bench crafts visor parts from kelp and Lumen (a blight filter, a seal patch kit, a battery booster). The radio is for calling for help, once you know what happened here.`],
+  ['Fixing the phone', () => `The second wreck's stern hides a replacement phone screen (light blue pod). Take it to a workbench and press ${k('use')}: peel the cracked glass away piece by piece without touching the live cracks. After that the phone never shocks you again, and its colours come back.`],
   ['Goals and skills', () => 'Every goal (Lumen gathered, scans, fish, distance swum...) has endless tiers. Each tier pays Bloom points, which you spend on the Skills tab. Some skills need another one learned first.'],
   ['Blacking out', () => 'If your health hits zero you black out and wake on your nearest raft. Your bag drops where you fell: swim back to the gold ring to pick it up. Blacking out again before you do loses it.'],
   ['Saving', () => 'The game saves as you play. Save game (on the pause menu or the main menu) also copies it to one of three slots, and Load game brings one back.'],
@@ -84,6 +87,7 @@ export function createPhone(el, g) {
   el.innerHTML = `
     <div class="phone-case">
       <div class="phone-screen">
+        <div class="repair" data-repair hidden></div>
         <div class="phone-cracks">${crackSvg(400, 780, 3)}</div>
         <header class="phone-hud">
           <div data-tip="<b>Lumen</b><br>The reef's light. Swim through glowing polyps to gather it. Spend it on building."><div class="label">Lumen</div><div class="big cyan" data-lumen></div></div>
@@ -95,6 +99,16 @@ export function createPhone(el, g) {
     </div>
     <p class="phone-hint">Tab or Esc to put it away</p>`;
   const body = el.querySelector('[data-body]');
+  // Fitting a new screen (at a workbench): peel the cracked glass off shard by shard. The live
+  // cracks stay on top of the shards, so a careless tap still shocks you.
+  let shards = null;
+  const repairEl = el.querySelector('[data-repair]');
+  function renderRepair() {
+    repairEl.hidden = !shards;
+    if (!shards) { repairEl.innerHTML = ''; return; }
+    repairEl.innerHTML = `<p class="repair-tip">Peel the old glass away, piece by piece. Don't touch the live cracks. <b>${shards.filter(Boolean).length} left</b></p>
+      ${shards.map((sh, i) => sh ? `<button type="button" class="shard" data-shard="${i}" style="left:${sh.x}%;top:${sh.y}%;--r:${sh.r}deg"></button>` : '').join('')}`;
+  }
 
   function renderBuild() {
     const placing = g.placing();
@@ -274,7 +288,10 @@ export function createPhone(el, g) {
 
   function render() {
     el.style.setProperty('--crack', g.systems.online('visor') ? 0 : Math.max(0.15, 0.6 - g.systems.integrity * 0.5));
-    el.classList.toggle('sealed', g.systems.online('visor')); // fixed glass can't shock you
+    const fixed = g.phoneFixed();
+    el.classList.toggle('fixed', fixed);
+    el.classList.toggle('sealed', fixed || g.systems.online('visor')); // fixed glass can't shock you
+    if (fixed) el.style.setProperty('--crack', 0);
     el.querySelector('[data-lumen]').textContent = g.lumen().toLocaleString();
     el.querySelector('[data-data]').textContent = `${g.research.data} Data`;
     el.querySelector('[data-bloom]').textContent = `${progress.points()} Bloom`;
@@ -318,6 +335,13 @@ export function createPhone(el, g) {
     if (b.dataset.eat) { g.onEat(b.dataset.eat); render(); }
     if (b.dataset.buy) { g.onBuy(b.dataset.buy); render(); }
     if (b.dataset.tut) { g.onTutorial(b.dataset.tut); render(); }
+    if (b.dataset.shard && shards) {
+      shards[Number(b.dataset.shard)] = null;
+      g.onShard?.();
+      if (!shards.some(Boolean)) { shards = null; g.onRepaired(); render(); }
+      renderRepair();
+      return;
+    }
     if ('charge' in b.dataset) { g.onCharge(); render(); }
   });
 
@@ -334,6 +358,12 @@ export function createPhone(el, g) {
       setTimeout(() => { if (!el.classList.contains('up')) el.hidden = true; }, 260);
     },
     render,
+    /** Starts fitting the new screen. */
+    startRepair() {
+      shards = Array.from({ length: 6 }, () => ({ x: 8 + Math.random() * 70, y: 14 + Math.random() * 62, r: Math.round(Math.random() * 360) }));
+      renderRepair();
+    },
+    get repairing() { return !!shards; },
     /** An app crashes back to the home screen (water in the phone). */
     crash() {
       tab = 'build';

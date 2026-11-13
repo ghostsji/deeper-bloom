@@ -424,6 +424,57 @@ try {
   check('the sinkhole drags you down', envR.sank > 1, `${envR.sank.toFixed(1)} m`);
   check('something big passes in the dark', envR.giant);
 
+  // Echo's signal and pearl, the outpost's rooms, and fitting the phone a new screen.
+  const late = await run(`
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const key = (c) => { dispatchEvent(new KeyboardEvent('keydown', { code: c })); dispatchEvent(new KeyboardEvent('keyup', { code: c })); };
+    db.camera.position.set(0, 12, 20);
+    await sleep(300);
+    const near = db.getSignal();
+    db.camera.position.set(90, 12, 20);
+    await sleep(300);
+    const far = db.getSignal(), noSignal = /NO SIGNAL/.test(document.getElementById('signal').textContent);
+    db.addLumen(40);
+    db.camera.position.set(1.5, 3, 1.5);
+    await sleep(200);
+    key('KeyF');
+    await sleep(100);
+    const pearl = db.getPearl();
+    // The outpost (powered in an earlier check): feed the generator, then use the lab bench.
+    const O = (await import('./src/outpost.js')).OUTPOST;
+    db.survival.add('kelp', 4);
+    const fuel0 = db.outpost.fuel;
+    db.camera.position.set(O.x - 4, db.camera.position.y, O.z - 3);
+    db.camera.position.y = (await import('./src/world.js')).floorY(O.x - 4, O.z - 3) + 1.5;
+    await sleep(150);
+    key('KeyF');
+    await sleep(100);
+    const fuelled = db.outpost.fuel >= fuel0;
+    const lp = { x: O.x + 2, z: O.z + 3 };
+    db.camera.position.set(lp.x, (await import('./src/world.js')).floorY(lp.x, lp.z) + 1.5, lp.z);
+    await sleep(150);
+    key('KeyF');
+    await sleep(200);
+    const bench = !document.getElementById('bench').hidden && document.querySelectorAll('#bench [data-craft]').length === 3;
+    document.querySelector('#bench [data-benchback]').click();
+    await sleep(200);
+    // A new phone screen: peel off every shard.
+    db.camera.position.set(0, 12, 24);
+    await sleep(200);
+    key('Tab');
+    await sleep(300);
+    db.phone.startRepair();
+    // Each peel redraws the shards, so find the next one each time.
+    for (let i = 0; i < 10 && document.querySelector('#phone .shard'); i++) document.querySelector('#phone .shard').click();
+    const fixed = db.isFixed();
+    key('Tab');
+    await sleep(200);
+    return { near, far, noSignal, pearl, fuelled, bench, fixed };`);
+  check("Echo's signal fades with distance", late.near > 0.9 && late.far < 0.15 && late.noSignal, `${late.near.toFixed(2)} → ${late.far.toFixed(2)}`);
+  check("Lumen grows Echo's pearl", late.pearl === 1);
+  check("the outpost's generator takes kelp, and its lab bench crafts", late.fuelled && late.bench);
+  check('peeling off the old glass fits the new phone screen', late.fixed);
+
   const save = await run(`
     const raw = localStorage.getItem('deeperbloom-save-v1');
     const s = raw && JSON.parse(raw);

@@ -29,9 +29,11 @@ export const UPGRADE_PODS = [
 ];
 // Echo's logs: two in the vault, one in each wreck, one by Echo, one out on the far rocks.
 export const LOG_PODS = LOGS.map((l, i) => ({ id: `pod-${l.id}`, name: l.title, kind: 'log', log: l.id, vault: i === 1 || i === 3 }));
-const ITEMS = [...APPS, ...CELLS, ...FUSES, ...UPGRADE_PODS, ...LOG_PODS];
+// A replacement phone screen, in the second wreck's stern.
+export const PARTS = [{ id: 'screen', name: 'Phone screen', kind: 'part' }];
+const ITEMS = [...APPS, ...CELLS, ...FUSES, ...UPGRADE_PODS, ...LOG_PODS, ...PARTS];
 // Each kind of pod has its own colour band (and compass marker).
-const BAND = { app: 0x5cf2d6, cell: 0xffc46b, fuse: 0xff9a5c, upgrade: 0xf4fbff, log: 0xb59cff };
+const BAND = { app: 0x5cf2d6, cell: 0xffc46b, fuse: 0xff9a5c, upgrade: 0xf4fbff, log: 0xb59cff, part: 0x8fd0ff };
 const PICKUP = 2.4;
 
 // Where each pod lies. Skills goes in a far kelp patch (where eels nest) to make it a trip.
@@ -54,6 +56,7 @@ function spots(kelpPatches) {
   spot['pod-log4'] = OUTPOST_SPOTS.vaultLog2();
   spot['pod-log5'] = at(3, 3.5);       // beside Echo's pearl
   spot['pod-log6'] = at(42, -40);      // out on the far rocks
+  spot.screen = wreckSpot(1, 2);
   return spot;
 }
 

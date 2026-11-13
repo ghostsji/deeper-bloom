@@ -563,3 +563,21 @@ body[data-theme="green"] { --cyan: #7CFF8A; --hud-line: rgba(124, 255, 138, .38)
 
 .clock { display: block; margin-top: 2px; font: 11px var(--mono); letter-spacing: .18em; color: var(--muted); }
 .compass .mark.giant { width: 26px; height: 8px; border-radius: 50%; background: rgba(255, 60, 90, .7); box-shadow: 0 0 14px #ff3050; animation: flick .9s infinite steps(1); }
+
+/* ---- Echo's signal ---- */
+.signal { position: absolute; top: 124px; left: 34px; display: flex; align-items: flex-end; gap: 3px; font: 11px var(--mono); letter-spacing: .18em; color: var(--muted); }
+.signal span { margin-right: 6px; }
+.signal i { width: 4px; background: rgba(156, 192, 196, .25); }
+.signal i.on { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); }
+.signal b { margin-left: 8px; font-weight: 400; color: #ff8f8f; animation: flick 1.2s infinite steps(1); }
+.signal.weak i.on { background: var(--gold); box-shadow: none; }
+/* ---- The phone: unrepaired colours, and fitting a new screen ---- */
+.phone:not(.fixed) .phone-screen { filter: saturate(.72) contrast(.95); }
+.phone.fixed .phone-cracks { display: none; }
+.repair { position: absolute; inset: 0; z-index: 2; background: rgba(2, 8, 12, .35); }
+.repair-tip { position: absolute; top: 46px; left: 16px; right: 16px; margin: 0; padding: 8px 12px; border-radius: 12px; background: rgba(3, 17, 26, .85); color: var(--sub); font-size: 12px; text-align: center; }
+.repair-tip b { color: var(--gold); }
+.shard { position: absolute; width: 58px; height: 46px; translate: -50% -50%; rotate: var(--r); border: 1px solid rgba(235, 255, 252, .7); background: linear-gradient(135deg, rgba(225, 250, 248, .35), rgba(120, 170, 180, .15)); clip-path: polygon(10% 0, 100% 18%, 82% 100%, 0 70%); cursor: pointer; }
+.shard:hover { background: linear-gradient(135deg, rgba(255, 255, 255, .6), rgba(160, 210, 220, .3)); }
+/* ---- The ending ---- */
+.ending .card { max-width: 560px; }

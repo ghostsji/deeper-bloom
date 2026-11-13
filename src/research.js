@@ -33,7 +33,7 @@ const speciesById = Object.fromEntries(SPECIES.map((s) => [s.id, s]));
 // The research tree. needs: codex entries that must be complete first.
 export const RESEARCH = [
   { id: 'lens', name: 'Tuned lens', cost: 10, needs: ['polyp', 'jelly'], desc: 'Scan from twice as far, and faster.' },
-  { id: 'buoy', name: 'Glow buoy', cost: 8, needs: ['polyp'], desc: 'Build piece: a floating light that marks a spot on open water.' },
+  { id: 'buoy', name: 'Glow buoy', cost: 8, needs: ['polyp'], desc: 'Build piece: a floating light that marks a spot on open water, and relays Echo\'s signal 35 m around it.' },
   { id: 'jellylamp', name: 'Jelly lamp', cost: 12, needs: ['jelly'], desc: 'Build piece: a pulsing pink lamp for your rafts.' },
   { id: 'weave', name: 'Woven kelp decks', cost: 10, needs: ['kelp'], desc: 'Rafts cost 1 Lumen instead of 3.' },
   { id: 'uv', name: 'UV flush', cost: 14, needs: ['eel'], desc: 'Holding purge (G) also burns eel blight off your visor, at extra battery.' },

@@ -94,6 +94,10 @@ headlamp.position.set(0, 0, 0);
 headlamp.target.position.set(0, 0, -1);
 camera.add(headlamp, headlamp.target);
 let fusesHeld = 0;
+// Echo's pearl (grown with Lumen), her signal, the phone's new screen, and the ending.
+const PEARL_COSTS = [25, 50, 100];
+let pearlLevel = 0, signal = 1, hasScreen = false, phoneFixed = false, endingSeen = false, boostersMade = 0;
+const nearPearl = () => camera.position.distanceTo(world.echo.position) < 4.5 + pearlLevel;
 const survival = createSurvival({
   onBlackout: blackout,
   onChange: () => { renderBag(); save(); },
@@ -192,6 +196,9 @@ function echoSay(key) {
 // One line at a time, with a pause after each so Echo never piles tips on you.
 function updateSubtitle(t) {
   if (t < lineUntil) return;
+  // Out of Echo's range her lines wait; on a weak signal they come through late.
+  if (queue.length && !queue[0].silent && signal < 0.15) return;
+  if (queue.length && !queue[0].silent && signal < 0.5 && Math.random() < 0.6) { lineUntil = t + 1.2; return; }
   const next = queue.shift();
   if (next) {
     hudFx.text($('subtitle'), next.text, 'comms', '<b>ECHO</b>');
@@ -213,7 +220,7 @@ let playTime = 0;
 function setLumen(n) {
   lumen = n;
   hudFx.text($('lumen'), lumen.toLocaleString(), 'ledger');
-  world.setBloom(Math.min(1, lumen / BLOOM_FULL));
+  world.setBloom(Math.min(1, lumen / BLOOM_FULL + pearlLevel * 0.15)); // a bigger pearl, a brighter reef
   renderBuildBar();
   if (phone?.open) phone.render();
 }
@@ -236,7 +243,7 @@ function gather(n, bright) {
 function save() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      lumen, builds: builder.serialize(), research: research.serialize(), survival: survival.serialize(), progress: progress.serialize(), tutorial: tutorial.serialize(), systems: systems.serialize(), apps: salvage.serialize(), suit: suit.serialize(), env: env.serialize(), outpost: outpost.serialize(), fusesHeld,
+      lumen, builds: builder.serialize(), research: research.serialize(), survival: survival.serialize(), progress: progress.serialize(), tutorial: tutorial.serialize(), systems: systems.serialize(), apps: salvage.serialize(), suit: suit.serialize(), env: env.serialize(), pearlLevel, hasScreen, phoneFixed, endingSeen, boostersMade, outpost: outpost.serialize(), fusesHeld,
       satchel: satchel && { pos: satchel.pos.toArray(), items: satchel.items },
     }));
   } catch { /* not saved */ }
@@ -253,6 +260,8 @@ function load() {
     suit.load(data.suit);
     outpost.load(data.outpost);
     env.load(data.env);
+    pearlLevel = data.pearlLevel || 0; hasScreen = !!data.hasScreen; phoneFixed = !!data.phoneFixed; endingSeen = !!data.endingSeen; boostersMade = data.boostersMade || 0;
+    world.echo.setSize(1 + pearlLevel * 0.25);
     if (outpost.powered) salvage.unlockVault();
     fusesHeld = data.fusesHeld || 0;
     builder.load(data.builds);
@@ -377,6 +386,11 @@ function use(piece) {
     const dried = suit.dryPhone();
     if (n) { sizzle(); toast(`Cooked ${n} item${n > 1 ? 's' : ''}${dried ? ', and dried your phone' : ''}`); echoSay('cooked'); progress.track('cooked', n); }
     else toast(dried ? 'Dried your phone by the fire.' : 'Nothing raw to cook.');
+  }
+  if (piece.id === 'workbench' && hasScreen && !phoneFixed) {
+    openPhone();
+    if (state === 'phone') phone.startRepair();
+    return;
   }
   if (piece.id === 'workbench' && suit.tears) {
     // Tears first: one strand of kelp patches each.
@@ -518,6 +532,14 @@ const phone = createPhone($('phone'), {
   tutorial,
   systems,
   hasApp: (id) => salvage.found(id),
+  phoneFixed: () => phoneFixed,
+  onShard: () => click(),
+  onRepaired: () => {
+    phoneFixed = true;
+    rebootSound();
+    toast('New screen fitted: no more cracks, no more shocks, and the colours are back.', { color: '#8fd0ff' });
+    save();
+  },
   logs: () => LOGS.filter((l) => salvage.found(`pod-${l.id}`)),
   fullMemory: FULL_MEMORY,
   onTutorial: (act) => {
@@ -627,6 +649,8 @@ function setState(s) {
   setPaused(s !== 'playing' && s !== 'title'); // menu music plays at full volume
   pauseVoice(s !== 'playing' && s !== 'blackout');
   if (s !== 'rewire') rewire.close();
+  $('bench').hidden = s !== 'bench';
+  $('ending').hidden = s !== 'ending';
   if (s !== 'playing') { player.clearKeys(); setLens(false); document.body.classList.remove('stunned'); $('stunnote').hidden = true; }
 }
 
@@ -728,8 +752,16 @@ addEventListener('keydown', (e) => {
   else if (e.code === 'KeyJ' && state === 'playing') openPhone('codex');
   if (e.code === 'KeyX' && state === 'playing' && placing) stopPlacing();
   if (e.code === 'Digit1' && state === 'playing' && !player.stunned) toggleHarpoon();
-  if (e.code === 'KeyF' && state === 'playing' && !player.stunned && !lensOn && outpost.nearConsole(camera.position)) fitFuses();
-  else if (e.code === 'KeyF' && state === 'playing' && !player.stunned && !lensOn && usable()) use(usable());
+  if (e.code === 'KeyF' && state === 'playing' && !player.stunned && !lensOn) {
+    const at = camera.position;
+    if (!outpost.powered && outpost.nearConsole(at)) fitFuses();
+    else if (outpost.near('generator', at)) refuel();
+    else if (outpost.near('radio', at)) useRadio();
+    else if (outpost.near('lab', at)) openBench();
+    else if (nearPearl()) feedPearl();
+    else if (usable()) use(usable());
+  }
+  if (e.code === 'Escape' && (state === 'bench' || state === 'ending')) setState('paused');
   // V: the visor panel, to rewire a system you've got the part for.
   if (e.code === 'KeyV' && state === 'playing' && !player.stunned) openRewire();
   else if (e.code === 'KeyV' && state === 'rewire') engage();
@@ -840,6 +872,7 @@ function takeShock(where, dmg = 3) {
 onShock(({ where }) => takeShock(where));
 
 // ---- The suit: visor battery, pressure, live electricity --------------------------
+const _buoy = new THREE.Vector3();
 let silt = 0, surgeBlockedSaid = false, lastCamY = 0, earsWarned = false, ventClock = 0, sinkSaid = false, nightSaid = false;
 addEventListener('keydown', (e) => { if (e.code === 'KeyH' && state === 'playing' && suit.equalise()) earPop(); });
 let creakClock = 3, bubbleClock = 0, sparkClock = 0, wasCharging = false, purgeHeld = false, purgeClock = 0;
@@ -858,6 +891,7 @@ function updateSuit(dt) {
   if (!envOut.inSinkhole) sinkSaid = false;
   const night = env.night;
   world.setNight(night);
+  renderer.toneMappingExposure = 1.1 * (1 - night * 0.5); // night really is dark; glowing things still show
   combat.setNight(night);
   headlamp.intensity = night > 0.05 && suit.power > 0 && under ? 2.6 * night : 0;
   if (headlamp.intensity) suit.drain(0.12 * night * dt);
@@ -869,6 +903,14 @@ function updateSuit(dt) {
     if (systems.online('sensor')) toast('THREAT SENSOR: something very large, passing.', { color: '#ff8f8f' });
   }
   if (envOut.giantEnd) giantDrone(false);
+  // Echo's signal: from her pearl, or any glow buoy relaying it.
+  let sig = 0;
+  const reach = (at, range) => { const d = Math.hypot(camera.position.x - at.x, camera.position.z - at.z); sig = Math.max(sig, Math.min(1, Math.max(0, 1 - (d - range) / 40))); };
+  reach(world.echo.position, 30 + pearlLevel * 25);
+  builder.each('buoy', (pc) => reach(pc.mesh.getWorldPosition(_buoy), 35));
+  if (sig < 0.15 && signal >= 0.15) toast("You've swum out of Echo's range. Build glow buoys to relay her signal.", { color: '#9fb8ff' });
+  signal = sig;
+  hudFx.setSignal(signal);
   const sinkSpeed = Math.max(0, (lastCamY - camera.position.y) / Math.max(dt, 1e-3));
   lastCamY = camera.position.y;
   const ev = suit.update(dt, { depth, surfaced, onDeck: player.onFoot, sealed, dashing: player.dashing, breath: survival.stats.breath, sinkSpeed });
@@ -926,6 +968,7 @@ function updateSuit(dt) {
     sparkClock = 0.15 + Math.random() * 0.5 * (hz.nearest / 8);
   }
   const op = outpost.update(dt, t, camera.position);
+  if (op.ranOut) toast("The outpost's generator has run dry. Feed it kelp to bring the power back.", { color: '#ff9a5c' });
   if (op.hit && playTime - lastWorldShock > 2) {
     lastWorldShock = playTime;
     shockAt(innerWidth / 2, innerHeight / 2);
@@ -971,6 +1014,92 @@ function openRewire() {
   setState('rewire');
   rewire.open(next, systems.integrity >= 0.5 ? 4 : 3);
 }
+// The outpost's rooms (while the generator has fuel).
+function refuel() {
+  const n = outpost.refuel(survival.bag.kelp || 0);
+  if (!n) { click(); toast(outpost.fuel >= 100 ? 'The generator is full.' : 'The generator burns kelp. You have none.'); return; }
+  survival.bag.kelp -= n;
+  if (!survival.bag.kelp) delete survival.bag.kelp;
+  renderBag(); thunk();
+  toast(`Fed the generator ${n} kelp (fuel ${Math.round(outpost.fuel)}%).`);
+  save();
+}
+function useRadio() {
+  if (!outpost.running) { click(); toast('The radio is dead. The generator needs fuel (kelp).'); return; }
+  if (salvage.count('log') < LOGS.length) { staticSound(1); toast("Only static. You don't know enough about what happened here yet (find Echo's logs).", { color: '#9fb8ff' }); return; }
+  showEnding();
+}
+function showEnding() {
+  if (document.pointerLockElement) document.exitPointerLock();
+  setState('ending');
+  rebootSound();
+  $('ending').innerHTML = `<div class="card">
+    <p class="eyebrow">Signal sent</p>
+    <h2>Someone answered</h2>
+    <p class="lede">You tell them about the tide that ran backwards, the outpost, the blight, and Echo keeping the bloom asleep so it would live. For a long time there is only static. Then, far above, a light sweeps across the water, and a voice says they're coming.</p>
+    <p class="lede">Echo's pearl brightens. Below you, the reef glows the way it used to.</p>
+    <p class="small">Thanks for playing Deeper Bloom. The reef is yours to keep exploring.</p>
+    <button type="button" class="primary" data-continue>Keep diving</button>
+  </div>`;
+  $('ending').querySelector('[data-continue]').addEventListener('click', () => engage(), { once: true });
+  if (!endingSeen) { endingSeen = true; world.setBloom(1); }
+  save();
+}
+const RECIPES = [
+  { id: 'filter', name: 'Blight filter', desc: 'Blight spreads half as fast.', kelp: 3, lumen: 15, done: () => suit.filter, make: () => suit.fitFilter() },
+  { id: 'patch', name: 'Seal patch kit', desc: 'Patches every tear in your suit.', kelp: 2, lumen: 0, done: () => !suit.tears, make: () => suit.patch(99) },
+  { id: 'booster', name: 'Battery booster', desc: 'Like another power cell: the battery lasts longer.', kelp: 2, lumen: 30, done: () => boostersMade >= 1, make: () => { suit.addCell(); boostersMade++; } },
+];
+function openBench() {
+  if (!outpost.running) { click(); toast('The lab bench is dead. The generator needs fuel (kelp).'); return; }
+  if (document.pointerLockElement) document.exitPointerLock();
+  setState('bench');
+  renderBench();
+}
+function renderBench() {
+  const kelp = survival.bag.kelp || 0;
+  $('bench').innerHTML = `<div class="card slots-card">
+    <p class="eyebrow">Outpost lab</p>
+    <h2>Craft visor parts</h2>
+    ${RECIPES.map((r) => {
+      const done = r.done(), can = !done && kelp >= r.kelp && lumen >= r.lumen;
+      return `<button type="button" class="slot-row" data-craft="${r.id}" ${can ? '' : 'disabled'}>
+        <span class="slot-info"><b>${r.name}</b><small>${r.desc}</small></span>
+        <span class="slot-over">${done ? 'Done' : `${r.kelp ? `${r.kelp} kelp` : ''}${r.kelp && r.lumen ? ' · ' : ''}${r.lumen ? `${r.lumen} Lumen` : ''}`}</span>
+      </button>`;
+    }).join('')}
+    <p class="small">You have ${kelp} kelp and ${lumen} Lumen.</p>
+    <button type="button" class="secondary" data-benchback>Back</button>
+  </div>`;
+}
+document.getElementById('bench').addEventListener('click', (e) => {
+  if (e.target.closest('[data-benchback]')) { uiSound('back'); engage(); return; }
+  const id = e.target.closest('[data-craft]')?.dataset.craft;
+  const r = RECIPES.find((x) => x.id === id);
+  if (!r) return;
+  survival.bag.kelp -= r.kelp;
+  if (!survival.bag.kelp) delete survival.bag.kelp;
+  setLumen(lumen - r.lumen);
+  r.make();
+  renderBag(); thunk();
+  toast(`Crafted: ${r.name}.`, { color: '#5CF2D6' });
+  save();
+  renderBench();
+});
+function feedPearl() {
+  const cost = PEARL_COSTS[pearlLevel];
+  if (cost == null) { toast("Echo's pearl is as big as it gets."); return; }
+  if (lumen < cost) { click(); toast(`Growing Echo's pearl takes ${cost} Lumen.`); return; }
+  setLumen(lumen - cost);
+  progress.track('spent', cost);
+  pearlLevel++;
+  world.echo.setSize(1 + pearlLevel * 0.25);
+  setLumen(lumen); // re-applies the reef's glow with the bigger pearl
+  chime();
+  toast(`Echo's pearl grows (${pearlLevel} of ${PEARL_COSTS.length}): her signal reaches ${30 + pearlLevel * 25} m and the reef glows brighter.`, { color: '#F4EEE6' });
+  save();
+}
+
 function fitFuses() {
   if (outpost.powered) { toast('The outpost already has power.'); return; }
   if (!fusesHeld) { click(); toast(`The console needs ${FUSES_NEEDED - outpost.fitted} more fuse${FUSES_NEEDED - outpost.fitted > 1 ? 's' : ''}. They're somewhere around the outpost.`); return; }
@@ -996,6 +1125,9 @@ function updateSalvage(dt) {
       suit.addCell();
       suit.charge(100);
       toast(`Power cell fitted (${suit.cells} of 2): your visor battery lasts longer, and it's fully charged.`, { color: '#ffc46b' });
+    } else if (got.kind === 'part') {
+      hasScreen = true;
+      toast(`A replacement phone screen! Fit it at a workbench (${keyName('use')}).`, { color: '#8fd0ff' });
     } else if (got.kind === 'fuse') {
       fusesHeld++;
       toast(`Picked up a fuse (${fusesHeld} held). Fit it at the sunken outpost's console with ${keyName('use')}.`, { color: '#ff9a5c' });
@@ -1076,10 +1208,19 @@ function frame() {
     hudFx.text($('scanlabel'), scan.status, 'lens', `<b>${scan.name}</b>`);
     $('scanlabel').classList.toggle('known', scan.done);
   }
-  const atConsole = state === 'playing' && !lensOn && !outpost.powered && outpost.nearConsole(camera.position);
-  const near = state === 'playing' && !lensOn && !atConsole ? usable() : null;
-  $('prompt').hidden = !near && !atConsole;
-  if (atConsole) $('prompt').innerHTML = `<kbd>${keyName('use')}</kbd>Fit fuses (${fusesHeld} held, ${outpost.fitted} of ${FUSES_NEEDED} fitted)`;
+  // What F does here: the outpost's console and rooms, Echo's pearl, or a raft piece.
+  let label = null;
+  if (state === 'playing' && !lensOn) {
+    const at = camera.position;
+    if (!outpost.powered && outpost.nearConsole(at)) label = `Fit fuses (${fusesHeld} held, ${outpost.fitted} of ${FUSES_NEEDED} fitted)`;
+    else if (outpost.near('generator', at)) label = `Feed the generator kelp (fuel ${Math.round(outpost.fuel)}%)`;
+    else if (outpost.near('radio', at)) label = outpost.running ? 'Use the radio' : 'The radio (no power)';
+    else if (outpost.near('lab', at)) label = outpost.running ? 'Lab bench: craft visor parts' : 'Lab bench (no power)';
+    else if (nearPearl() && pearlLevel < PEARL_COSTS.length) label = `Grow Echo's pearl (${PEARL_COSTS[pearlLevel]} Lumen)`;
+  }
+  const near = state === 'playing' && !lensOn && !label ? usable() : null;
+  $('prompt').hidden = !near && !label;
+  if (label) $('prompt').innerHTML = `<kbd>${keyName('use')}</kbd>${label}`;
   else if (near) $('prompt').innerHTML = `<kbd>F</kbd>${USE_LABEL[near.id]}${near.id === 'kelpfarm' ? ` (${near.state?.kelp || 0})` : ''}`;
   const depth = Math.max(0, SURFACE_Y - camera.position.y);
   hudFx.text($('depth'), player.onFoot ? 'On deck' : depth < 0.3 ? 'Surface' : `${depth.toFixed(1)} m`, 'depth');
@@ -1097,7 +1238,7 @@ function frame() {
 
 
 // ?debug exposes the internals in the console.
-if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, systems, hudFx, salvage, suit, hazards, outpost, rewire, env, headlamp, giveFuses: (n) => { fusesHeld += n; }, setSilt: (v) => { silt = v; }, getSilt: () => silt, addLumen: (n) => setLumen(lumen + n) } });
+if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, systems, hudFx, salvage, suit, hazards, outpost, rewire, env, headlamp, phone, feedPearl, setScreen: () => { hasScreen = true; }, getPearl: () => pearlLevel, getSignal: () => signal, isFixed: () => phoneFixed, giveFuses: (n) => { fusesHeld += n; }, setSilt: (v) => { silt = v; }, getSilt: () => silt, addLumen: (n) => setLumen(lumen + n) } });
 
 renderBuildBar();
 load();

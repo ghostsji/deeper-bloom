@@ -12,6 +12,10 @@ const CONSOLE = { dx: 7, dz: 0 };
 // Floor grates near the console: on for 2 s, off for 2 s, each at its own phase.
 const GRATES = [[9.5, 3], [9.5, -3], [12, 0]];
 export const GRATE_RANGE = 1.6;
+// Once it has power, the outpost's other rooms work: a generator that burns kelp (it runs
+// down, and the power goes with it), a radio, and a lab bench for crafting visor parts.
+export const FUEL = { drain: 0.25 /* % per second */, perKelp: 20 };
+const ROOMS = { generator: [-4, -3], radio: [-4, 3], lab: [2, 3] };
 
 const at = (dx, dz, up = 0) => { const x = OUTPOST.x + dx, z = OUTPOST.z + dz; return new THREE.Vector3(x, floorY(x, z) + up, z); };
 /** Spots for the salvage pods tied to the outpost (fuses, and what's in the vault). */
@@ -65,16 +69,37 @@ export function createOutpost(scene) {
   scene.add(g);
 
   const consolePos = at(CONSOLE.dx, CONSOLE.dz, 1);
-  let fitted = 0, powered = false, doorOpen = 0;
+  let fitted = 0, powered = false, doorOpen = 0, fuel = 0, wasRunning = false;
+  // The rooms' machines, inside the hall.
+  const roomPos = Object.fromEntries(Object.entries(ROOMS).map(([id, [dx, dz]]) => [id, at(dx, dz, 1)]));
+  const genMat = new THREE.MeshStandardMaterial({ color: 0x3b4a50, emissive: 0x000000 });
+  const gen = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.8, 1.6, 12), genMat); gen.position.copy(roomPos.generator).sub(base).setY(0.95);
+  const radio = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 0.6), hull); radio.position.copy(roomPos.radio).sub(base).setY(1.1);
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.6), hull); mast.position.copy(radio.position).y += 1.1;
+  const bench = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.9, 0.9), rust); bench.position.copy(roomPos.lab).sub(base).setY(0.75);
+  g.add(gen, radio, mast, bench);
   const live = (gr, t) => !powered && ((t + gr.phase) % 4) < 2;
+  const running = () => powered && fuel > 0;
   function setLights() {
-    for (const s of strips) s.material = powered ? lightOn : lightOff;
+    for (const s of strips) s.material = running() ? lightOn : lightOff;
+    genMat.emissive.setHex(running() ? 0xff9a5c : 0x000000);
     sockets.forEach((m, i) => { m.material = i < fitted ? socketOn : socketOff; });
   }
 
   return {
     get fitted() { return fitted; },
     get powered() { return powered; },
+    /** Powered and with fuel in the generator: the rooms work. */
+    get running() { return running(); },
+    get fuel() { return fuel; },
+    near: (room, pos) => powered && pos.distanceTo(roomPos[room]) < 2.6,
+    /** Burns kelp in the generator; returns how much was used. */
+    refuel(kelp) {
+      const n = Math.min(kelp, Math.ceil((100 - fuel) / FUEL.perKelp));
+      fuel = Math.min(100, fuel + n * FUEL.perKelp);
+      setLights();
+      return n;
+    },
     consolePos,
     grates: () => grates.map((gr) => gr.pos),
     nearConsole: (pos) => pos.distanceTo(consolePos) < 3,
@@ -82,12 +107,16 @@ export function createOutpost(scene) {
     fit(n) {
       if (powered || n <= 0) return false;
       fitted = Math.min(FUSES_NEEDED, fitted + n);
-      if (fitted >= FUSES_NEEDED) powered = true;
+      if (fitted >= FUSES_NEEDED) { powered = true; fuel = 100; }
       setLights();
       return powered;
     },
     /** Animates; returns the grate you're standing on while it's live (or null). */
+    // Returns the live grate you're on (or null), and ranOut when the generator just died.
     update(dt, t, pos) {
+      let ranOut = false;
+      if (powered && fuel > 0) { fuel = Math.max(0, fuel - FUEL.drain * dt); if (fuel === 0) ranOut = true; }
+      if (running() !== wasRunning) { wasRunning = running(); setLights(); }
       if (powered && doorOpen < 1) {
         doorOpen = Math.min(1, doorOpen + dt * 0.4);
         doorL.position.z = -0.95 - doorOpen * 1.7; doorR.position.z = 0.95 + doorOpen * 1.7;
@@ -98,11 +127,11 @@ export function createOutpost(scene) {
         gr.mesh.material.emissiveIntensity = on ? 1.4 + Math.random() * 1.2 : 0;
         if (on && Math.hypot(pos.x - gr.pos.x, pos.z - gr.pos.z) < GRATE_RANGE && pos.y - gr.pos.y < 2.5) hit = gr;
       }
-      return { hit };
+      return { hit, ranOut };
     },
-    serialize: () => ({ fitted, powered }),
+    serialize: () => ({ fitted, powered, fuel }),
     load(d) {
-      fitted = d?.fitted ?? 0; powered = !!d?.powered;
+      fitted = d?.fitted ?? 0; powered = !!d?.powered; fuel = d?.fuel ?? (powered ? 100 : 0);
       if (powered) { doorOpen = 1; doorL.position.z = -2.65; doorR.position.z = 2.65; }
       setLights();
     },
@@ -113,7 +142,7 @@ export function createOutpost(scene) {
 export const WRECKS = [{ x: 34, z: 26, rot: 0.6 }, { x: -40, z: 18, rot: -1.1 }];
 /** Spot k (0: the upgrade, in the hull; 1: a log, by the bow) at wreck i. */
 export function wreckSpot(i, k) {
-  const w = WRECKS[i], a = w.rot, d = k ? 3.2 : -0.6;
+  const w = WRECKS[i], a = w.rot, d = k === 2 ? -3.6 : k ? 3.2 : -0.6;
   const x = w.x + Math.cos(a) * d, z = w.z + Math.sin(a) * d;
   return new THREE.Vector3(x, floorY(x, z) + 1, z);
 }

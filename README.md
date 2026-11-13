@@ -60,6 +60,14 @@ Logic in `src/suit.js` (unit tested), hazards in `src/hazards.js`.
 - **Echo's logs**: six violet pods; each plays a broken fragment, and the full set restores her memory of the flood (phone Guide).
 - **Visor themes** unlock at SYS 100% (Options → Display & help).
 
+## Blight, the deep, and Echo's reach
+
+- **Blight**: eel bites smear blight on the visor; it spreads and darkens the readouts under it. Scrub it at a research station, or research the UV flush (G burns it off). **Tears**: bites can tear the suit (fog, a slow chill) until you patch them with kelp at a workbench. **Ears**: dropping fast builds pressure (whine, muffle, red edges, then pain); **H** equalises. **Short circuits**: after a leak the wet visor mirrors the compass, swaps your bars, or shows a false depth.
+- **Night and day** (8-minute days, clock under the depth): at night the water goes dark, the visor light comes on (battery), eels see further and the giant passes more often. **Currents** on the east and west edges push you; a **sinkhole** south of the reef drags you down; **gas vents** give breath, fog the glass and throw you up. A **giant shape** passes beyond the fog every few minutes (closer once you have all of Echo's logs).
+- **Echo's signal** (ECHO bars, top left) fades with distance from her pearl: her lines break up, arrive late, then stop. Glow buoys relay it 35 m. **Grow her pearl** with Lumen (F at the pearl: 25, 50, 100): more range and a brighter reef.
+- **The outpost's rooms** (with power): the generator burns kelp (fuel runs down; no fuel, no power); the lab bench crafts a blight filter, a seal patch kit and a battery booster; the radio, once you have all six of Echo's logs, calls for help: the ending.
+- **A new phone screen** lies in the second wreck's stern: fit it at a workbench by peeling off the cracked glass without touching the live cracks. No more phone shocks, and its colours come back.
+
 ## Lost phone apps
 
 The flood washed the Codex, Status, Goals and Skills apps out of your phone: their tabs show as Missing (with a last-signal hint) until you find them. Each module lies on the reef in a salvage pod: a blinking capsule under a thin beam of light with a bright core, a sonar ring pulsing across the sand, and a ping that gets faster and louder as you close in (within about 30 m). Skills is in a far kelp patch where eels nest. Once Navigation is restored, pods show on the compass. Swim into a pod to put its app back. Build, Research and Guide are never lost. See `src/salvage.js`.

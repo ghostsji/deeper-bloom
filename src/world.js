@@ -491,6 +491,8 @@ function addEcho(scene) {
   const base = y + 1.9;
   return {
     position: new THREE.Vector3(0, base, 0),
+    /** Grows the pearl and its rock (Echo's pearl upgrades). */
+    setSize(f) { g.scale.setScalar(f); },
     update(t) {
       pearl.position.y = base + Math.sin(t * 1.2) * 0.12;
       light.position.copy(pearl.position);

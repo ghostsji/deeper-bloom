@@ -138,10 +138,11 @@ export function createHudFx(root, systems) {
     const t = texts.get(el);
     const sys = t.sys && !systems.online(t.sys) ? t.sys : null;
     // Damaged readouts break up badly in a burst and a little the rest of the time.
-    const p = Math.max(!sys ? 0 : bursts[sys].until > now ? 0.55 : sys === 'comms' ? 0.1 : 0, t.sys === 'comms' ? air * 0.5 : 0);
+    const p = Math.max(!sys ? 0 : bursts[sys].until > now ? 0.55 : sys === 'comms' ? 0.1 : 0, t.sys === 'comms' ? Math.max(air * 0.5, (1 - signal) * 0.6) : 0);
     const shown = p ? scramble(t.text, p) : t.text;
     if (t.prefix) el.innerHTML = `${t.prefix}${shown.replace(/</g, '&lt;')}`; else el.textContent = shown;
   }
+  let signal = 1;
   let now = 0, air = 0, phantomUntil = 0, shortUntil = 0, lieDepth = null;
   function shortCircuit() {
     const kind = ['mirror', 'swap', 'lie'][(Math.random() * 3) | 0];
@@ -190,6 +191,17 @@ export function createHudFx(root, systems) {
   return {
     text,
     restore,
+    /** Echo's signal (0 none .. 1 full): her subtitles break up as it weakens; bars top left. */
+    setSignal(v) {
+      const was = signal;
+      signal = v;
+      if (Math.abs(was - v) > 0.03) for (const [el, tx] of texts) if (tx.sys === 'comms') paint(el);
+      const bars = v <= 0.02 ? 0 : Math.ceil(v * 4);
+      const el = root.querySelector('#signal');
+      const html = `<span>ECHO</span>${[1, 2, 3, 4].map((i) => `<i class="${i <= bars ? 'on' : ''}" style="height:${3 + i * 3}px"></i>`).join('')}${bars ? '' : '<b>NO SIGNAL</b>'}`;
+      if (el.innerHTML !== html) el.innerHTML = html;
+      el.classList.toggle('weak', bars <= 1);
+    },
     /** Running out of air (0 fine .. 1 about to black out): the HUD breaks down with you. */
     setAir(a, playing) {
       const was = air;
