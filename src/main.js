@@ -28,7 +28,7 @@ import { LOGS, FULL_MEMORY } from './logs.js';
 import { UPGRADES } from './suit.js';
 import { setTooltips } from './tooltips.js';
 import { keyName } from './controls.js';
-import { initAudio, updateAudio, setMusic, uiSound, pop, chime, thunk, salvagePing, rebootSound, glitchSound, staticSound, creakSound, glassCrackSound, bubbleSound, lowPowerSound, chargeSound, sparkSound, setPaused, gasp, heartbeat, warn, munch, sizzle, grab, harpoonFire, thud, hiss, bite, release, click } from './audio.js';
+import { initAudio, updateAudio, setMusic, uiSound, pop, chime, thunk, salvagePing, rebootSound, glitchSound, staticSound, creakSound, glassCrackSound, bubbleSound, lowPowerSound, chargeSound, sparkSound, setEars, earPop, setPaused, gasp, heartbeat, warn, munch, sizzle, grab, harpoonFire, thud, hiss, bite, release, click } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 const BLOOM_FULL = 60;   // Lumen gathered for the reef to glow at full strength
@@ -116,6 +116,10 @@ const combat = createCombat(scene, camera, world, {
     bite();
     survival.damage(dmg);
     hurtFlash();
+    // Blight smears across the glass, and the bite may tear the suit.
+    const blightBefore = suit.blight;
+    if (suit.bitten()) toast(`The bite tore your suit (${suit.tears} tear${suit.tears > 1 ? 's' : ''})! Cold water is getting in. Patch it at a workbench with kelp.`, { color: '#ff8f8f' });
+    else if (blightBefore < 0.01) toast("Eel blight on your visor! It'll spread. Scrub it off at a research station.", { color: '#ff9a5c' });
   },
   onEelKilled: () => {
     release();
@@ -356,12 +360,25 @@ const USABLE = ['station', 'fire', 'kelpfarm', 'workbench'];
 const USE_LABEL = { station: 'Research station', fire: 'Cook food', kelpfarm: 'Collect kelp', workbench: 'Repair harpoon' };
 const usable = () => builder.nearest(camera.position, USE_RANGE, USABLE);
 function use(piece) {
+  if (piece.id === 'station' && suit.cleanBlight()) { sizzle(); toast('Scrubbed the blight off your visor.'); save(); return; }
   if (piece.id === 'station') openPhone('research');
   if (piece.id === 'fire') {
     const n = survival.cook();
     const dried = suit.dryPhone();
     if (n) { sizzle(); toast(`Cooked ${n} item${n > 1 ? 's' : ''}${dried ? ', and dried your phone' : ''}`); echoSay('cooked'); progress.track('cooked', n); }
     else toast(dried ? 'Dried your phone by the fire.' : 'Nothing raw to cook.');
+  }
+  if (piece.id === 'workbench' && suit.tears) {
+    // Tears first: one strand of kelp patches each.
+    const n = suit.patch(survival.bag.kelp || 0);
+    if (n) {
+      survival.bag.kelp -= n;
+      if (!survival.bag.kelp) delete survival.bag.kelp;
+      renderBag(); thunk();
+      toast(`Patched ${n} tear${n > 1 ? 's' : ''} in your suit${suit.tears ? ` (${suit.tears} left)` : ''}.`);
+      save();
+    } else toast('Patching a tear takes 1 kelp.');
+    return;
   }
   if (piece.id === 'workbench') {
     const r = survival.repair('harpoon');
@@ -812,14 +829,25 @@ function takeShock(where, dmg = 3) {
 onShock(({ where }) => takeShock(where));
 
 // ---- The suit: visor battery, pressure, live electricity --------------------------
-let silt = 0, surgeBlockedSaid = false;
+let silt = 0, surgeBlockedSaid = false, lastCamY = 0, earsWarned = false;
+addEventListener('keydown', (e) => { if (e.code === 'KeyH' && state === 'playing' && suit.equalise()) earPop(); });
 let creakClock = 3, bubbleClock = 0, sparkClock = 0, wasCharging = false, purgeHeld = false, purgeClock = 0;
 addEventListener('keydown', (e) => { if (e.code === 'KeyG') purgeHeld = true; });
 addEventListener('keyup', (e) => { if (e.code === 'KeyG') purgeHeld = false; });
 addEventListener('blur', () => { purgeHeld = false; });
 function updateSuit(dt) {
   const depth = Math.max(0, SURFACE_Y - camera.position.y), surfaced = atSurface(), sealed = systems.online('visor');
-  const ev = suit.update(dt, { depth, surfaced, onDeck: player.onFoot, sealed, dashing: player.dashing, breath: survival.stats.breath });
+  const sinkSpeed = Math.max(0, (lastCamY - camera.position.y) / Math.max(dt, 1e-3));
+  lastCamY = camera.position.y;
+  const ev = suit.update(dt, { depth, surfaced, onDeck: player.onFoot, sealed, dashing: player.dashing, breath: survival.stats.breath, sinkSpeed });
+  // Cold water through tears and unequalised ears both hurt.
+  const hd = suit.healthDrain({ surfaced, onDeck: player.onFoot });
+  if (hd) survival.damage(hd * dt);
+  setEars(suit.ears);
+  if (suit.ears >= 0.6 && !earsWarned) { earsWarned = true; toast(`Your ears hurt from the pressure. Press ${keyName('equalise')} to equalise.`, { color: '#ff8f8f' }); }
+  if (suit.ears < 0.2) earsWarned = false;
+  // With the UV flush researched, purging also burns blight off.
+  if (purgeHeld && research.isUnlocked('uv')) suit.uvFlush(dt);
   // Holding purge clears the fog, at a little battery.
   if (purgeHeld && suit.purge(dt) && (purgeClock -= dt) <= 0) { hiss(); purgeClock = 0.9; }
   if (ev.overheat) {
@@ -850,7 +878,7 @@ function updateSuit(dt) {
     if (camera.position.y < SURFACE_Y) survival.stats.breath = Math.max(0, survival.stats.breath - (100 / 45) * suit.leakBreathFactor() * dt);
     if ((bubbleClock -= dt) <= 0) { bubbleSound(); bubbleClock = 0.6 + Math.random() * 1.2; }
   }
-  hudFx.setSuit({ power: suit.power, charging: charging && suit.power < 100, unpowered: suit.unpowered, crackLayers: sealed ? 0 : suit.crackLayers, stress: suit.stress, leak: suit.leak, sealed, fog: suit.fog, heat: suit.heat, overheated: suit.overheated });
+  hudFx.setSuit({ power: suit.power, charging: charging && suit.power < 100, unpowered: suit.unpowered, crackLayers: sealed ? 0 : suit.crackLayers, stress: suit.stress, leak: suit.leak, sealed, fog: suit.fog, heat: suit.heat, overheated: suit.overheated, blight: suit.blight, ears: suit.ears, tears: suit.tears, visorWet: suit.visorWet });
 
   // Live electricity: crackle as you get close, shock if you touch.
   const hz = hazards.update(dt, t, camera.position);

@@ -41,6 +41,12 @@ export const HEAT = {
   hot: 0.7,          // above this the battery drains twice as fast
   reset: 0.55,       // after overheating, cooled back below this you're fine again
 };
+// Blight from eel bites creeps across the glass and eats into the readouts under it.
+export const BLIGHT = { bite: 0.25, spread: 0.006, uvClean: 0.2, uvPower: 1.2 };
+// Ear pressure: dropping faster than this (m/s) without equalising builds it up.
+export const EARS = { safeSink: 1.2, rate: 0.14, ease: 0.04, hurt: 2 /* health per second at full */ };
+// Suit tears: a bite can rip the suit, letting cold water in (more fog, a slow chill).
+export const TEARS = { max: 3, chance: 0.5, fog: 0.03, chill: 0.15 /* health per second per tear */ };
 // Visor upgrades found in wrecks and the outpost.
 export const UPGRADES = {
   plate: { name: 'Pressure plate', desc: 'The glass takes 5 m more depth before it strains.' },
@@ -50,6 +56,7 @@ export const UPGRADES = {
 
 export function createSuit() {
   let fog = 0, heat = 0, overheated = false, phoneWet = 0, upgrades = new Set();
+  let blight = 0, visorWet = 0, ears = 0, tears = 0, filter = false;
   let power = 100, cells = 0, stress = 0, leak = 0, warned = new Set();
   return {
     get power() { return power; },
@@ -61,6 +68,25 @@ export function createSuit() {
     get overheated() { return overheated; },
     get phoneWet() { return phoneWet; },
     has: (id) => upgrades.has(id),
+    get blight() { return blight; },
+    get visorWet() { return visorWet; },
+    get ears() { return ears; },
+    get tears() { return tears; },
+    /** An eel bite: blight on the glass, and maybe a tear in the suit. Returns true if it tore. */
+    bitten(roll = Math.random()) {
+      blight = Math.min(1, blight + BLIGHT.bite);
+      if (tears < TEARS.max && roll < TEARS.chance) { tears++; return true; }
+      return false;
+    },
+    cleanBlight() { const was = blight; blight = 0; return was > 0.02; },
+    /** The UV flush (researched): burns blight off with the purge, at extra battery. */
+    uvFlush(dt) { if (blight <= 0 || power <= 0) return false; blight = Math.max(0, blight - BLIGHT.uvClean * dt); power = Math.max(0, power - BLIGHT.uvPower * dt); return true; },
+    /** A blight filter (crafted at the outpost lab) halves how fast it spreads. */
+    fitFilter() { filter = true; },
+    get filter() { return filter; },
+    equalise() { const was = ears; ears = Math.max(0, ears - 0.8); return was > 0.05; },
+    /** Patches tears (one kelp each, at a workbench). Returns how many were patched. */
+    patch(kelp) { const n = Math.min(tears, kelp); tears -= n; return n; },
     addUpgrade(id) { upgrades.add(id); },
     get upgrades() { return [...upgrades]; },
     /** A shock heats the suit, fogs the glass and gets water in the phone. */
@@ -78,7 +104,7 @@ export function createSuit() {
     charge(pct) { power = Math.min(100, power + pct); for (const w of LOW_WARNINGS) if (power > w) warned.delete(w); },
 
     // s: { depth (m below surface), surfaced (head out), onDeck, sealed (visor seal fixed),
-    //      dashing, breath (0..100) }
+    //      dashing, breath (0..100), sinkSpeed (m/s, downward) }
     // Returns what happened: { warn: % low-power warning, layer: new crack layer, leaking: started,
     // overheat: just overheated }
     update(dt, s) {
@@ -94,6 +120,16 @@ export function createSuit() {
       const fogRate = (Math.max(0, s.depth - FOG.coldDepth) / 10) * FOG.cold + (s.dashing || (s.breath ?? 100) < 40 ? FOG.panting : 0);
       if (s.surfaced || s.onDeck) fog = Math.max(0, fog - FOG.clear * dt);
       else fog = Math.min(1, fog + fogRate * (upgrades.has('coating') ? 0.5 : 1) * dt);
+      // Blight spreads once it has a hold (half as fast with a filter).
+      if (blight > 0) blight = Math.min(1, blight + BLIGHT.spread * (filter ? 0.5 : 1) * dt);
+      // Ears: dropping fast builds pressure; equalising (or easing off) lets it out.
+      const sink = s.sinkSpeed ?? 0;
+      if (!s.surfaced && sink > EARS.safeSink) ears = Math.min(1, ears + (sink - EARS.safeSink) * EARS.rate * dt);
+      else ears = Math.max(0, ears - EARS.ease * dt);
+      // Tears let cold water in: the glass fogs faster.
+      if (tears && !s.surfaced && !s.onDeck) fog = Math.min(1, fog + TEARS.fog * tears * dt);
+      // Water in the visor's electronics after a leak (it causes short circuits as it dries).
+      visorWet = leak > 0.1 ? 1 : Math.max(0, visorWet - 0.012 * dt);
       // Water in the phone dries slowly, faster in the air.
       phoneWet = Math.max(0, phoneWet - (s.onDeck ? 0.03 : 0.004) * dt);
       if (leak > 0.2) phoneWet = Math.max(phoneWet, 0.8);
@@ -117,14 +153,17 @@ export function createSuit() {
       return ev;
     },
     get safeDepth() { return PRESSURE.safeDepth + (upgrades.has('plate') ? 5 : 0); },
+    /** Health lost per second to cold (tears) and ear pressure. */
+    healthDrain: (s) => (tears && !s.surfaced && !s.onDeck ? TEARS.chill * tears : 0) + (ears > 0.8 ? EARS.hurt * (ears - 0.8) / 0.2 : 0), // hurts from 80%, fully at 100%
     /** Extra breath lost per second from water in the visor (on top of normal drain). */
     leakBreathFactor: () => (leak / PRESSURE.leakMax) * PRESSURE.leakBreath,
-    serialize: () => ({ power, cells, stress, leak, fog, heat, phoneWet, upgrades: [...upgrades] }),
+    serialize: () => ({ power, cells, stress, leak, fog, heat, phoneWet, upgrades: [...upgrades], blight, visorWet, ears, tears, filter }),
     load(d) {
       if (!d) return;
       power = d.power ?? 100; cells = d.cells ?? 0; stress = d.stress ?? 0; leak = d.leak ?? 0;
       fog = d.fog ?? 0; heat = d.heat ?? 0; phoneWet = d.phoneWet ?? 0; upgrades = new Set(d.upgrades || []);
       overheated = heat >= 1;
+      blight = d.blight ?? 0; visorWet = d.visorWet ?? 0; ears = d.ears ?? 0; tears = d.tears ?? 0; filter = !!d.filter;
     },
   };
 }

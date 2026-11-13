@@ -105,3 +105,46 @@ test('shocks and leaks get water in the phone; drying it clears it', () => {
   assert.ok(suit.dryPhone());
   assert.equal(suit.phoneWet, 0);
 });
+
+test('eel bites smear blight that spreads; cleaning or a UV flush removes it', () => {
+  const suit = createSuit();
+  suit.bitten(0.9);
+  assert.equal(suit.blight, 0.25);
+  run(suit, 20, shallow);
+  assert.ok(suit.blight > 0.3);
+  const p0 = suit.power;
+  for (let i = 0; i < 10; i++) suit.uvFlush(0.1);
+  assert.ok(suit.blight < 0.2 && suit.power < p0);
+  assert.ok(suit.cleanBlight());
+  assert.equal(suit.blight, 0);
+});
+
+test('bites can tear the suit; tears chill you and get patched with kelp', () => {
+  const suit = createSuit();
+  assert.ok(suit.bitten(0.1));
+  assert.ok(suit.bitten(0.1));
+  assert.equal(suit.tears, 2);
+  assert.ok(suit.healthDrain(deep) > 0);
+  assert.equal(suit.healthDrain({ ...deep, onDeck: true }), 0);
+  assert.equal(suit.patch(1), 1);
+  assert.equal(suit.tears, 1);
+});
+
+test('dropping fast hurts your ears until you equalise', () => {
+  const suit = createSuit();
+  run(suit, 10, { ...deep, sinkSpeed: 3 });
+  assert.equal(suit.ears, 1);
+  assert.ok(suit.healthDrain(shallow) > 0);
+  assert.ok(suit.equalise());
+  assert.ok(suit.ears < 0.3);
+  run(suit, 10, shallow);
+  assert.equal(suit.ears, 0);
+});
+
+test('a leak leaves the visor wet for a while (short circuits)', () => {
+  const suit = createSuit();
+  run(suit, 70, deep);
+  assert.equal(suit.visorWet, 1);
+  run(suit, 40, { ...shallow, surfaced: true });
+  assert.ok(suit.visorWet < 1 && suit.visorWet > 0);
+});

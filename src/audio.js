@@ -74,7 +74,7 @@ function voice(freq, t, dur, { type = 'sine', gain = 0.1, attack = 0.02, out = m
 export function updateAudio(depth, above = false) {
   if (!ctx) return;
   const now = ctx.currentTime;
-  water.frequency.setTargetAtTime(above ? 12000 : Math.max(500, 2600 - depth * 70), now, 0.5);
+  water.frequency.setTargetAtTime((above ? 12000 : Math.max(500, 2600 - depth * 70)) * (1 - earLevel * 0.75), now, 0.5);
 
   const th = theme;
   if (now >= nextChord) {
@@ -541,4 +541,28 @@ export function sparkSound(closeness) {
   if (!ctx) return;
   const t = ctx.currentTime;
   crackle(t, 0.05 + Math.random() * 0.12, { freq: 2500 + Math.random() * 3000, q: 0.7, gain: 0.02 + closeness * 0.12, chop: 0.008 });
+}
+
+// Ear pressure: a thin whine that rises with it (0..1), and the muffle it puts on everything.
+let earOsc = null, earGain = null, earLevel = 0;
+export function setEars(level) {
+  if (!ctx) return;
+  earLevel = level;
+  if (!earOsc) {
+    earOsc = ctx.createOscillator(); earGain = ctx.createGain();
+    earOsc.type = 'sine'; earOsc.frequency.value = 6500; earGain.gain.value = 0;
+    earOsc.connect(earGain); earGain.connect(visor); earOsc.start();
+  }
+  const t = ctx.currentTime;
+  earOsc.frequency.setTargetAtTime(5200 + level * 3500, t, 0.3);
+  earGain.gain.setTargetAtTime(level > 0.25 ? (level - 0.25) * 0.02 : 0, t, 0.3);
+}
+/** Extra muffle for the water filter from ear pressure (multiplies its cutoff). */
+export const earMuffle = () => 1 - earLevel * 0.75;
+// Equalising: a soft double pop.
+export function earPop() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  beep(t, 180, 90, 0.08, { type: 'sine', gain: 0.08 });
+  beep(t + 0.09, 220, 110, 0.07, { type: 'sine', gain: 0.06 });
 }

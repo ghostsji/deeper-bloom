@@ -36,6 +36,7 @@ export const RESEARCH = [
   { id: 'buoy', name: 'Glow buoy', cost: 8, needs: ['polyp'], desc: 'Build piece: a floating light that marks a spot on open water.' },
   { id: 'jellylamp', name: 'Jelly lamp', cost: 12, needs: ['jelly'], desc: 'Build piece: a pulsing pink lamp for your rafts.' },
   { id: 'weave', name: 'Woven kelp decks', cost: 10, needs: ['kelp'], desc: 'Rafts cost 1 Lumen instead of 3.' },
+  { id: 'uv', name: 'UV flush', cost: 14, needs: ['eel'], desc: 'Holding purge (G) also burns eel blight off your visor, at extra battery.' },
   { id: 'garden', name: 'Coral garden', cost: 20, needs: ['branch', 'brain'], desc: 'Build piece: grows coral on your raft and makes 1 Lumen every 10 seconds.' },
 ];
 const researchById = Object.fromEntries(RESEARCH.map((r) => [r.id, r]));

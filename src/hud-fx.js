@@ -79,6 +79,8 @@ export function createHudFx(root, systems) {
     <div class="v-stress">${[[0.32, 0.3, 4], [0.72, 0.55, 4], [0.45, 0.72, 5]].map((imp, i) => `<div class="v-stress-layer" data-l="${i + 1}">${cracks(1600, 900, 31 + i * 7, [imp], true)}</div>`).join('')}</div>
     <div class="v-leak"><svg viewBox="0 0 1600 40" preserveAspectRatio="none"><path d="M0 20 Q80 6 160 20 T320 20 T480 20 T640 20 T800 20 T960 20 T1120 20 T1280 20 T1440 20 T1600 20 V40 H0Z"/></svg>
       ${Array.from({ length: 9 }, (_, i) => `<i class="bub" style="left:${6 + i * 11}%;--d:${(i * 0.7) % 3}s"></i>`).join('')}</div>
+    <div class="v-blight">${Array.from({ length: 7 }, (_, i) => `<i style="--x:${[8, 82, 22, 70, 48, 4, 90][i]}%;--y:${[12, 8, 80, 74, 6, 46, 44][i]}%;--n:${i}"></i>`).join('')}</div>
+    <div class="v-ears"></div>
     <div class="v-fog"></div><div class="v-tunnel"></div><div class="v-glare"></div><div class="v-phantom"></div>
     <div class="v-scan"></div><div class="v-static"></div>
     <i class="v-corner tl"></i><i class="v-corner tr"></i><i class="v-corner bl"></i><i class="v-corner br"></i><div class="v-flash"></div>`;
@@ -140,11 +142,20 @@ export function createHudFx(root, systems) {
     const shown = p ? scramble(t.text, p) : t.text;
     if (t.prefix) el.innerHTML = `${t.prefix}${shown.replace(/</g, '&lt;')}`; else el.textContent = shown;
   }
-  let now = 0, air = 0, phantomUntil = 0;
+  let now = 0, air = 0, phantomUntil = 0, shortUntil = 0, lieDepth = null;
+  function shortCircuit() {
+    const kind = ['mirror', 'swap', 'lie'][(Math.random() * 3) | 0];
+    shortUntil = now + 3;
+    staticSound(0.15);
+    if (kind === 'mirror') { compass.classList.add('mirror'); setTimeout(() => compass.classList.remove('mirror'), 3000); }
+    if (kind === 'swap') { const st2 = root.querySelector('.stats'); st2.classList.add('swapped'); setTimeout(() => st2.classList.remove('swapped'), 3000); }
+    if (kind === 'lie') { lieDepth = `${(5 + Math.random() * 60).toFixed(1)} m`; setTimeout(() => { lieDepth = null; }, 3000); }
+  }
   const heatEl = $('#heat'), phantom = visor.querySelector('.v-phantom');
 
   /** Shows text in a HUD readout that the given system's damage can scramble. */
   function text(el, value, sys, prefix = '') {
+    if (lieDepth && sys === 'depth') value = lieDepth;
     const t = texts.get(el);
     if (t && t.text === value && t.prefix === prefix) return;
     texts.set(el, { text: value, prefix, sys });
@@ -223,6 +234,18 @@ export function createHudFx(root, systems) {
       strainEl.style.setProperty('--s', st.stress.toFixed(3));
       strainEl.classList.toggle('max', st.stress >= 1);
       visor.style.setProperty('--fog', (st.fog ?? 0).toFixed(3));
+      // Blight creeps in from the edges; readouts under it go dark as it spreads.
+      const bl = st.blight ?? 0;
+      visor.style.setProperty('--blight', bl.toFixed(3));
+      const BLIGHTED = [['.lumen', 0.3], ['.datacount', 0.3], ['.depthbox', 0.55], ['#compass', 0.7], ['.stats', 0.85]];
+      for (const [q, at] of BLIGHTED) root.querySelector(q)?.classList.toggle('blighted', bl >= at);
+      visor.style.setProperty('--ears', (st.ears ?? 0).toFixed(3));
+      const tw = root.querySelector('#suitwarn');
+      const warn = [st.tears ? `SUIT TORN ×${st.tears}` : '', bl > 0.05 ? `BLIGHT ${Math.round(bl * 100)}%` : '', (st.ears ?? 0) > 0.4 ? 'EQUALISE' : ''].filter(Boolean).join(' · ');
+      if (tw.textContent !== warn) tw.textContent = warn;
+      tw.hidden = !warn;
+      // A wet visor shorts out now and then: parts of the HUD swap, mirror or lie.
+      if ((st.visorWet ?? 0) > 0.05 && now > shortUntil && Math.random() < 0.004 * st.visorWet) shortCircuit();
       visor.classList.toggle('glare', !!st.overheated);
       const hp = Math.round((st.heat ?? 0) * 100);
       const hHtml = `<span>TEMP</span><i style="--v:${(st.heat ?? 0).toFixed(3)}"></i><b>${st.overheated ? 'HOT' : `${hp}%`}</b>`;

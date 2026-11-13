@@ -543,3 +543,20 @@ body[data-theme="green"] { --cyan: #7CFF8A; --hud-line: rgba(124, 255, 138, .38)
 .compass .mark.fuse { width: 7px; height: 9px; background: #ff9a5c; box-shadow: 0 0 8px #ff9a5c; }
 .compass .mark.upgrade { width: 8px; height: 8px; border: 2px solid #f4fbff; transform-origin: center; rotate: 45deg; }
 .compass .mark.outpost { width: 10px; height: 8px; background: none; border: 2px solid #ff9a5c; border-top-width: 4px; }
+
+/* ---- Blight on the glass ---- */
+.v-blight { position: absolute; inset: 0; opacity: min(1, calc(var(--blight, 0) * 3)); }
+.v-blight i { position: absolute; left: var(--x); top: var(--y); width: calc(40px + var(--blight, 0) * 520px); height: calc(30px + var(--blight, 0) * 420px); translate: -50% -50%; border-radius: 47% 53% 41% 59% / 52% 44% 56% 48%;
+  background: radial-gradient(closest-side, rgba(255, 120, 40, .55), rgba(170, 60, 20, .45) 45%, rgba(90, 30, 10, .25) 70%, transparent),
+    repeating-radial-gradient(circle at 30% 40%, rgba(255, 170, 80, .25) 0 3px, transparent 3px 9px);
+  filter: blur(1.5px); mix-blend-mode: multiply; animation: blightcrawl 6s ease-in-out infinite alternate; animation-delay: calc(var(--n) * -1.1s); transition: width 2s, height 2s; }
+@keyframes blightcrawl { to { border-radius: 58% 42% 55% 45% / 45% 58% 42% 55%; rotate: 8deg; } }
+.blighted { filter: sepia(1) saturate(4) hue-rotate(-25deg) brightness(.45); animation: flick 1.7s infinite steps(1) !important; }
+/* ---- Ear pressure: the edges pulse ---- */
+.v-ears { position: absolute; inset: 0; opacity: calc(var(--ears, 0) * 1.2 - .3); background: radial-gradient(ellipse at center, transparent 50%, rgba(255, 60, 90, .35) 85%, rgba(120, 0, 30, .6)); animation: earpulse .9s ease-in-out infinite; }
+@keyframes earpulse { 50% { transform: scale(1.03); filter: brightness(1.4); } }
+.suitwarn { margin-top: 4px; font: 11px var(--mono); letter-spacing: .14em; color: #ff8f8f; animation: flick 1.4s infinite steps(1); }
+/* ---- Short circuits ---- */
+.compass.mirror { transform: translateX(-50%) scaleX(-1); }
+.stats.swapped { display: flex; flex-direction: column-reverse; }
+.stats.swapped .stat span { filter: blur(.4px) hue-rotate(120deg); }

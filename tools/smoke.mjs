@@ -376,6 +376,26 @@ try {
   check('a visor upgrade from the vault takes effect', op.upgraded);
   check("Echo's logs can be found", op.logs >= 1, `${op.logs} log(s)`);
 
+  // Blight, tears, ears and short circuits.
+  const trouble = await run(`
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    db.camera.position.set(4, 12, 30);
+    db.suit.load({ power: 90, blight: 0.7, tears: 2, ears: 1, visorWet: 0 });
+    await sleep(300);
+    const blighted = document.querySelector('.lumen').classList.contains('blighted');
+    const warn = document.getElementById('suitwarn').textContent;
+    const h0 = db.survival.stats.health;
+    await sleep(500);
+    const hurt = h0 - db.survival.stats.health;
+    dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyH' }));
+    dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyH' }));
+    const eased = db.suit.ears < 0.5;
+    db.suit.load({ power: 90 });
+    await sleep(200);
+    return { blighted, warn, hurt, eased };`);
+  check('blight covers readouts, and the HUD warns about tears and ears', trouble.blighted && /TORN/.test(trouble.warn) && /BLIGHT/.test(trouble.warn), trouble.warn);
+  check('tears and ear pressure hurt; H equalises', trouble.hurt > 0 && trouble.eased, `-${trouble.hurt.toFixed(2)} health`);
+
   const save = await run(`
     const raw = localStorage.getItem('deeperbloom-save-v1');
     const s = raw && JSON.parse(raw);
