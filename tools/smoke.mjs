@@ -114,7 +114,7 @@ try {
     key('Tab');
     await new Promise((r) => setTimeout(r, 200));
     return { open: tabs.length, rendered, tip, tutList, closed: document.getElementById('phone').classList.contains('up') === false };`);
-  check('the phone opens with all seven tabs', phone.open === 7, JSON.stringify(phone.rendered));
+  check('the phone opens with all eight tabs', phone.open === 8, JSON.stringify(phone.rendered));
   check('hovering shows a tooltip', /Bloom points/.test(phone.tip), phone.tip.slice(0, 40));
   check('the Guide tab lists the tutorial steps', phone.tutList >= 10, `${phone.tutList} steps`);
   check('every phone tab renders', Object.values(phone.rendered).every((n) => n > 0));
@@ -474,6 +474,25 @@ try {
   check("Lumen grows Echo's pearl", late.pearl === 1);
   check("the outpost's generator takes kelp, and its lab bench crafts", late.fuelled && late.bench);
   check('peeling off the old glass fits the new phone screen', late.fixed);
+
+  // The map: explored areas reveal, and tapping it sets a waypoint.
+  const mapR = await run(`
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const key = (c) => { dispatchEvent(new KeyboardEvent('keydown', { code: c })); dispatchEvent(new KeyboardEvent('keyup', { code: c })); };
+    db.camera.position.set(0, 12, 24);
+    await sleep(2500); // any phone reboot from earlier shocks passes
+    key('Tab');
+    await sleep(300);
+    document.querySelector('#phone [data-tab="map"]').click();
+    const cv = document.querySelector('#phone [data-map]');
+    const r = cv.getBoundingClientRect();
+    cv.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.left + r.width * 0.7, clientY: r.top + r.height * 0.3 }));
+    const wp = db.getWaypoint();
+    key('Tab');
+    await sleep(300);
+    return { canvas: !!cv, explored: db.reveal.explored, wp: !!wp };`);
+  check('the Map app draws the explored seabed', mapR.canvas && mapR.explored > 0, `${(mapR.explored * 100).toFixed(1)}% explored`);
+  check('tapping the map sets a waypoint', mapR.wp);
 
   const save = await run(`
     const raw = localStorage.getItem('deeperbloom-save-v1');

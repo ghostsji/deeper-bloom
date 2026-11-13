@@ -161,7 +161,7 @@ button.secondary:hover { color: var(--text); border-color: var(--cyan); }
 .phone .cchip b { font-size: 11px; line-height: 1.2; }
 .phone .cchip span { font-size: 11px; color: var(--sub); }
 .phone .cchip.dim { opacity: .55; }
-.phone-tabs { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); background: var(--deep); padding: 8px 8px 14px; flex-shrink: 0; }
+.phone-tabs { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); background: var(--deep); padding: 8px 8px 14px; flex-shrink: 0; }
 .phone-tabs button { min-height: 52px; font-size: 11px !important; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; background: none; border: 0; color: var(--muted); font: 700 12px 'DM Sans', sans-serif; cursor: pointer; }
 .phone-tabs button[aria-current] { color: var(--cyan); }
 #buildtip { min-height: 1em; }
@@ -581,3 +581,10 @@ body[data-theme="green"] { --cyan: #7CFF8A; --hud-line: rgba(124, 255, 138, .38)
 .shard:hover { background: linear-gradient(135deg, rgba(255, 255, 255, .6), rgba(160, 210, 220, .3)); }
 /* ---- The ending ---- */
 .ending .card { max-width: 560px; }
+
+/* ---- The Map app ---- */
+.phone canvas.map { width: 100%; aspect-ratio: 1; border-radius: 16px; border: 1.5px solid var(--line); cursor: crosshair; background: #020a10; }
+.phone .mk { display: inline-block; width: 8px; height: 8px; margin: 0 4px 0 8px; border-radius: 50%; vertical-align: middle; }
+.phone .mk.sq { border-radius: 1px; }
+.compass .mark.waypoint { width: 10px; height: 10px; background: none; border: 2px solid var(--gold); rotate: 45deg; box-shadow: 0 0 8px var(--gold); }
+.compass .mark.waypoint::after { color: var(--gold); rotate: -45deg; }

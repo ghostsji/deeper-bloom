@@ -7,6 +7,7 @@ import { SYSTEMS } from './hud-systems.js';
 import { crackSvg } from './hud-fx.js';
 import { APPS, CELLS } from './salvage.js';
 import { POWER, PRESSURE } from './suit.js';
+import { drawMap } from './map.js';
 
 // The diver's phone: Deep Bloom's app on a ruggedised handset. Tab brings it up, and the
 // game pauses while it's out. Tabs: build, research, codex, status, goals, skills and a
@@ -19,14 +20,16 @@ const ICONS = {
   status: '<path d="M3 12h4l2-5 4 10 2-5h6"/>',
   goals: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4"/>',
   skills: '<path d="M12 3v6M12 9l-5 5M12 9l5 5M7 14v5M17 14v5"/><circle cx="12" cy="3" r="1"/>',
+  map: '<path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15M15 6v15"/>',
   guide: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/>',
 };
-const TABS = [['build', 'Build'], ['research', 'Research'], ['codex', 'Codex'], ['status', 'Status'], ['goals', 'Goals'], ['skills', 'Skills'], ['guide', 'Guide']];
+const TABS = [['build', 'Build'], ['research', 'Research'], ['codex', 'Codex'], ['map', 'Map'], ['status', 'Status'], ['goals', 'Goals'], ['skills', 'Skills'], ['guide', 'Guide']];
 const k = (id) => `<kbd>${keyName(id)}</kbd>`;
 const TAB_TIPS = {
   build: () => '<b>Build</b><br>Raft pieces, paid for with Lumen. Pick one, then place it from the surface.',
   research: () => '<b>Research</b><br>Upgrades paid for with Data. Needs you next to a research station.',
   codex: () => `<b>Codex</b><br>Everything you've scanned with the Echo Lens. ${k('codex')} opens it.`,
+  map: () => '<b>Map</b><br>The seabed you\'ve explored, coloured by depth. Tap it to set a waypoint.',
   status: () => '<b>Status</b><br>Visor systems, health, breath, food, your harpoon and your bag. Eat from here.',
   goals: () => '<b>Goals</b><br>Endless achievements. Each tier pays Bloom points.',
   skills: () => '<b>Skills</b><br>Eight skill trees, paid for with Bloom points (never Lumen).',
@@ -57,6 +60,7 @@ const GUIDES = [
   ['Echo\'s signal and her pearl', () => `Echo can only reach you so far from her pearl. Further out her subtitles break up, her tips arrive late, and past a certain range she goes quiet (ECHO bars, top left). Glow buoys you build relay her signal for another 35 m around them. Bring Lumen to her pearl and press ${k('use')} to grow it (25, 50, then 100 Lumen): each size reaches 25 m further and makes the whole reef glow brighter.`],
   ['The outpost\'s rooms', () => `Once the outpost has power, its rooms work, for as long as the generator has fuel: feed it kelp with ${k('use')} (1 kelp = 20%). The lab bench crafts visor parts from kelp and Lumen (a blight filter, a seal patch kit, a battery booster). The radio is for calling for help, once you know what happened here.`],
   ['Fixing the phone', () => `The second wreck's stern hides a replacement phone screen (light blue pod). Take it to a workbench and press ${k('use')}: peel the cracked glass away piece by piece without touching the live cracks. After that the phone never shocks you again, and its colours come back.`],
+  ['The map', () => 'The Map app shows the seabed coloured by depth: pale teal shallows, deep blue, and near-black trenches. It starts hidden: everything within about 30 m of where you swim is revealed, and it remembers. Pods, wrecks and the outpost appear once you\'ve been near them. Tap the map to set a waypoint: it shows on your compass with its distance, and clears when you get there. Zoom in to see the 240 m around you.'],
   ['Goals and skills', () => 'Every goal (Lumen gathered, scans, fish, distance swum...) has endless tiers. Each tier pays Bloom points, which you spend on the Skills tab. Some skills need another one learned first.'],
   ['Blacking out', () => 'If your health hits zero you black out and wake on your nearest raft. Your bag drops where you fell: swim back to the gold ring to pick it up. Blacking out again before you do loses it.'],
   ['Saving', () => 'The game saves as you play. Save game (on the pause menu or the main menu) also copies it to one of three slots, and Load game brings one back.'],
@@ -269,6 +273,23 @@ export function createPhone(el, g) {
     return `<div class="note">${p.points} Bloom points to spend. Earn more from Goals.</div>${trees}`;
   }
 
+  // The map: the seabed you've explored, with a waypoint you set by tapping it.
+  let mapZoom = 'all', mapXf = null;
+  function renderMap() {
+    const v = g.mapView(), pct = Math.round(g.reveal.explored * 100);
+    return `<div class="row"><span class="label">Map</span><span class="small muted">${pct}% of the atoll explored</span></div>
+      <canvas class="map" data-map width="680" height="680" data-tip="Tap to set a waypoint (it shows on your compass). Fog hides what you haven't swum near yet."></canvas>
+      <div class="row">
+        <button type="button" class="btn small ghost" data-zoom>${mapZoom === 'all' ? 'Zoom in' : 'Whole atoll'}</button>
+        ${v.waypoint ? `<span class="small gold">Waypoint ${Math.round(Math.hypot(v.waypoint.x - v.you.x, v.waypoint.z - v.you.z))} m</span><button type="button" class="btn small ghost" data-clearwp>Clear</button>` : '<span class="small muted">Tap the map to set a waypoint</span>'}
+      </div>
+      <p class="sub"><span class="mk" style="background:#F4EEE6"></span>Echo <span class="mk" style="background:#5CF2D6"></span>pods <span class="mk sq" style="background:#C9A36A"></span>rafts <span class="mk sq" style="background:#FF9A5C"></span>outpost <span class="mk sq" style="background:#B8A07A"></span>wrecks. Dashed rings: Echo's signal and your buoys' reach.</p>`;
+  }
+  function paintMap() {
+    const cv = body.querySelector('[data-map]');
+    if (cv) mapXf = drawMap(cv, g.reveal, { ...g.mapView(), zoom: mapZoom });
+  }
+
   // An app the flood washed away: an empty, broken page until you find its module.
   const missing = (id) => APPS.some((a) => a.id === id) && !g.hasApp(id);
   function renderMissing(id) {
@@ -284,7 +305,7 @@ export function createPhone(el, g) {
       </div>`;
   }
 
-  const RENDER = { build: renderBuild, research: renderResearch, codex: renderCodex, status: renderStatus, goals: renderGoals, skills: renderSkills, guide: renderGuide };
+  const RENDER = { build: renderBuild, research: renderResearch, codex: renderCodex, map: renderMap, status: renderStatus, goals: renderGoals, skills: renderSkills, guide: renderGuide };
 
   function render() {
     el.style.setProperty('--crack', g.systems.online('visor') ? 0 : Math.max(0.15, 0.6 - g.systems.integrity * 0.5));
@@ -309,12 +330,22 @@ export function createPhone(el, g) {
     el.style.setProperty('--wet', wet.toFixed(2));
     const banner = wet > 0.2 ? '<p class="moisture">Moisture detected: taps may misread and apps may crash. Dry the phone at a cook fire (or leave it on a raft deck).</p>' : '';
     body.innerHTML = banner + (missing(tab) ? renderMissing(tab) : RENDER[tab]());
+    if (tab === 'map') paintMap();
     body.scrollTop = scroll;
   }
 
   el.addEventListener('click', (e) => {
+    const cv = e.target.closest?.('[data-map]');
+    if (cv && mapXf) {
+      const r = cv.getBoundingClientRect(), k = cv.width / r.width;
+      g.onWaypoint(mapXf.toWorld((e.clientX - r.left) * k, (e.clientY - r.top) * k));
+      render();
+      return;
+    }
     const b = e.target.closest('button');
     if (!b) return;
+    if ('zoom' in b.dataset) { mapZoom = mapZoom === 'all' ? 'near' : 'all'; render(); return; }
+    if ('clearwp' in b.dataset) { g.onWaypoint(null); render(); return; }
     // Water in the phone: sometimes a tap lands on the wrong button.
     const wet = g.suit.phoneWet;
     if (wet > 0.2 && !b.dataset.redirected && Math.random() < wet * 0.35) {

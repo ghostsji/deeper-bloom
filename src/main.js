@@ -5,6 +5,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { buildWorld, SURFACE_Y, floorY, setWorldSeed } from './world.js';
 import { applyLayout } from './layout.js';
+import { createReveal } from './map.js';
 import { createPlayer } from './player.js';
 import { createBuilder, PIECES, FARM_MAX } from './build.js';
 import { createSurvival, ITEMS, GEAR, gearMax, bagSize } from './survival.js';
@@ -23,7 +24,7 @@ import { createSalvage, APPS } from './salvage.js';
 import { onShock, shockAt } from './shock.js';
 import { createSuit, POWER } from './suit.js';
 import { createHazards } from './hazards.js';
-import { createOutpost, createWrecks, FUSES_NEEDED } from './outpost.js';
+import { createOutpost, createWrecks, FUSES_NEEDED, OUTPOST, WRECKS } from './outpost.js';
 import { createRewire } from './rewire.js';
 import { createEnvironment } from './environment.js';
 import { LOGS, FULL_MEMORY } from './logs.js';
@@ -63,6 +64,9 @@ const worldSeed = savedGame ? savedGame.seed ?? 7 : 1 + Math.floor(Math.random()
 setWorldSeed(worldSeed);
 const world = buildWorld(scene);
 applyLayout(worldSeed, world.kelpPatches); // the outpost, wrecks, cables, vents... from the seed
+// The map: what you've explored (fog of war), and the waypoint you've set.
+const reveal = createReveal();
+let waypoint = null;
 const player = createPlayer(camera, canvas);
 // The tutorial in the corner: steps finish from lifetime stats plus these notes.
 const tutorial = createTutorial(progress.stat);
@@ -251,7 +255,7 @@ function gather(n, bright) {
 function save() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      seed: worldSeed, lumen, builds: builder.serialize(), research: research.serialize(), survival: survival.serialize(), progress: progress.serialize(), tutorial: tutorial.serialize(), systems: systems.serialize(), apps: salvage.serialize(), suit: suit.serialize(), env: env.serialize(), pearlLevel, hasScreen, phoneFixed, endingSeen, boostersMade, outpost: outpost.serialize(), fusesHeld,
+      seed: worldSeed, map: reveal.serialize(), waypoint, lumen, builds: builder.serialize(), research: research.serialize(), survival: survival.serialize(), progress: progress.serialize(), tutorial: tutorial.serialize(), systems: systems.serialize(), apps: salvage.serialize(), suit: suit.serialize(), env: env.serialize(), pearlLevel, hasScreen, phoneFixed, endingSeen, boostersMade, outpost: outpost.serialize(), fusesHeld,
       satchel: satchel && { pos: satchel.pos.toArray(), items: satchel.items },
     }));
   } catch { /* not saved */ }
@@ -268,6 +272,8 @@ function load() {
     suit.load(data.suit);
     outpost.load(data.outpost);
     env.load(data.env);
+    reveal.load(data.map);
+    waypoint = data.waypoint || null;
     pearlLevel = data.pearlLevel || 0; hasScreen = !!data.hasScreen; phoneFixed = !!data.phoneFixed; endingSeen = !!data.endingSeen; boostersMade = data.boostersMade || 0;
     world.echo.setSize(1 + pearlLevel * 0.25);
     if (outpost.powered) salvage.unlockVault();
@@ -540,6 +546,9 @@ const phone = createPhone($('phone'), {
   tutorial,
   systems,
   hasApp: (id) => salvage.found(id),
+  reveal,
+  mapView: () => mapView(),
+  onWaypoint: (w) => { waypoint = w; uiSound('click'); save(); },
   phoneFixed: () => phoneFixed,
   onShard: () => click(),
   onRepaired: () => {
@@ -811,6 +820,21 @@ function updateTutorial() {
   card.classList.toggle('flash', performance.now() - flashT < 900);
 }
 
+// ---- The map ------------------------------------------------------------------------
+function mapView() {
+  camera.getWorldDirection(_dir);
+  const pts = (id) => { const out = []; builder.each(id, (pc) => { const w = pc.mesh.getWorldPosition(new THREE.Vector3()); out.push({ x: w.x, z: w.z }); }); return out; };
+  const pins = salvage.remaining().filter((p) => reveal.seen(p.pos.x, p.pos.z)).map((p) => ({ kind: p.kind === 'app' ? 'pod' : p.kind, x: p.pos.x, z: p.pos.z }));
+  if (reveal.seen(OUTPOST.x, OUTPOST.z)) pins.push({ kind: 'outpost', x: OUTPOST.x, z: OUTPOST.z });
+  for (const w of WRECKS) if (reveal.seen(w.x, w.z)) pins.push({ kind: 'wreck', x: w.x, z: w.z });
+  return {
+    you: { x: camera.position.x, z: camera.position.z, heading: Math.atan2(_dir.x, -_dir.z) },
+    echo: { x: world.echo.position.x, z: world.echo.position.z }, echoRange: 30 + pearlLevel * 25,
+    rafts: pts('raft'), buoys: pts('buoy'), relayRange: 35,
+    satchel: satchel && { x: satchel.pos.x, z: satchel.pos.z }, pins, waypoint,
+  };
+}
+
 // ---- Visor HUD ------------------------------------------------------------------
 const _dir = new THREE.Vector3();
 let sysClock = 0;
@@ -834,6 +858,7 @@ function updateVisor(dt) {
   if (satchel) points.push(point('satchel', satchel.pos));
   if (systems.online('nav')) for (const pod of salvage.remaining()) points.push(point(pod.kind === 'app' ? 'pod' : pod.kind, pod.pos));
   if (systems.online('nav') && !outpost.powered) points.push(point('outpost', outpost.consolePos));
+  if (waypoint) points.push(point('waypoint', { x: waypoint.x, z: waypoint.z }));
   if (systems.online('sensor') && env.giantPos) points.push({ ...point('giant', env.giantPos), dist: null });
   if (systems.online('sensor')) for (const h of hazards.sources) { const at = h.pos(); if (at.distanceTo(p) < 45) points.push({ ...point('hazard', at), dist: null }); }
   if (systems.online('sensor')) for (const e of combat.eelPositions()) if (e.distanceTo(p) < 45) points.push({ ...point('eel', e), dist: null });
@@ -911,6 +936,14 @@ function updateSuit(dt) {
     if (systems.online('sensor')) toast('THREAT SENSOR: something very large, passing.', { color: '#ff8f8f' });
   }
   if (envOut.giantEnd) giantDrone(false);
+  // The map fills in around you as you explore; reaching the waypoint clears it.
+  reveal.reveal(camera.position.x, camera.position.z);
+  if (waypoint && Math.hypot(waypoint.x - camera.position.x, waypoint.z - camera.position.z) < 6) {
+    waypoint = null;
+    chime();
+    toast('Waypoint reached.', { color: '#FFC46B' });
+    save();
+  }
   // Echo's signal: from her pearl, or any glow buoy relaying it.
   let sig = 0;
   const reach = (at, range) => { const d = Math.hypot(camera.position.x - at.x, camera.position.z - at.z); sig = Math.max(sig, Math.min(1, Math.max(0, 1 - (d - range) / 40))); };
@@ -1249,11 +1282,12 @@ function frame() {
 
 
 // ?debug exposes the internals in the console.
-if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { worldSeed, renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, systems, hudFx, salvage, suit, hazards, outpost, rewire, env, headlamp, phone, feedPearl, setScreen: () => { hasScreen = true; }, getPearl: () => pearlLevel, getSignal: () => signal, isFixed: () => phoneFixed, giveFuses: (n) => { fusesHeld += n; }, setSilt: (v) => { silt = v; }, getSilt: () => silt, addLumen: (n) => setLumen(lumen + n) } });
+if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { worldSeed, reveal, getWaypoint: () => waypoint, renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, systems, hudFx, salvage, suit, hazards, outpost, rewire, env, headlamp, phone, feedPearl, setScreen: () => { hasScreen = true; }, getPearl: () => pearlLevel, getSignal: () => signal, isFixed: () => phoneFixed, giveFuses: (n) => { fusesHeld += n; }, setSilt: (v) => { silt = v; }, getSilt: () => silt, addLumen: (n) => setLumen(lumen + n) } });
 
 renderBuildBar();
 load();
 renderGear();
+reveal.reveal(0, 24, 45); // you know the water where you dive in
 // Saves from before the visor HUD: systems you've already earned come back quietly.
 systems.update();
 hudFx.refresh();
