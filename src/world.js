@@ -70,6 +70,9 @@ export function buildWorld(scene) {
   let bloom = 0;
   // Stirred-up silt clouding the water (0 clear .. 1 you can barely see). See main.js.
   let silt = 0;
+  // Night (0 day .. 1 night): the light drops and the water goes near black.
+  let night = 0;
+  const nightWater = new THREE.Color(0x02090d), nightAir = new THREE.Color(0x04060f);
   const siltFog = new THREE.Color(0x3b3a2a);
 
   return {
@@ -80,17 +83,19 @@ export function buildWorld(scene) {
     kelpMesh: kelp.mesh,
     setBloom(v) { bloom = v; },
     setSilt(v) { silt = v; },
+    setNight(v) { night = v; },
     update(dt, t, camera, playerSpeed = 0) {
       time.value = t;
-      hemi.intensity = 0.9 + bloom * 0.7;
+      hemi.intensity = (0.9 + bloom * 0.7) * (1 - night * 0.72);
+      sun.intensity = 1.4 * (1 - night * 0.9);
       // Above the water it's a clear night over the atoll; below, the glowing murk.
       const above = camera.position.y > SURFACE_Y;
-      scene.fog.color.copy(above ? airFog : waterFog);
+      scene.fog.color.copy(above ? airFog : waterFog).lerp(above ? nightAir : nightWater, night * 0.8);
       scene.background.copy(scene.fog.color);
       scene.fog.density = above ? 0.009 : 0.03 - bloom * 0.008 + silt * 0.16;
       if (!above && silt > 0) { scene.fog.color.lerp(siltFog, silt * 0.75); scene.background.copy(scene.fog.color); }
       sky.visible = above;
-      rays.visible = !above;
+      rays.visible = !above && night < 0.6;
       surface.under.visible = !above;
       snow.points.visible = !above;
       snow.update(dt, camera);

@@ -93,6 +93,9 @@ export function createSuit() {
     shocked() { heat = Math.min(1, heat + HEAT.shock); fog = Math.min(1, fog + 0.25); phoneWet = Math.max(phoneWet, 0.5); },
     /** Holding purge: clears fog, costs battery. */
     purge(dt) { if (fog <= 0 || power <= 0) return false; fog = Math.max(0, fog - FOG.purge * dt); power = Math.max(0, power - FOG.purgePower * dt); return true; },
+    /** Extra battery used this frame (the visor's light at night). */
+    drain(pct) { power = Math.max(0, power - pct); },
+    addFog(v) { fog = Math.min(1, fog + v); },
     dryPhone() { const was = phoneWet; phoneWet = 0; return was > 0.05; },
     /** How much shock damage gets through. */
     shockFactor: () => (upgrades.has('guard') ? 0.5 : 1),

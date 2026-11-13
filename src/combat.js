@@ -184,6 +184,7 @@ export function createCombat(scene, camera, world, g) {
     }
   }
 
+  let nightSight = 1; // eels see half as far again at night
   const want = new THREE.Vector3(), toPlayer = new THREE.Vector3();
   function updateEels(dt, t, playerExposed) {
     const p = camera.position;
@@ -209,7 +210,7 @@ export function createCombat(scene, camera, world, g) {
       toPlayer.subVectors(p, head.position);
       const dist = toPlayer.length(), fromHome = head.position.distanceTo(e.home);
       e.modeT -= dt;
-      if (e.mode === 'idle' && playerExposed && dist < EEL.sight) { e.mode = 'chase'; g.onSpot(); }
+      if (e.mode === 'idle' && playerExposed && dist < EEL.sight * nightSight) { e.mode = 'chase'; g.onSpot(); }
       if ((e.mode === 'chase' || e.mode === 'lunge') && (!playerExposed || fromHome > EEL.leash)) e.mode = 'home';
       if (e.mode === 'chase' && dist < EEL.lungeRange) { e.mode = 'lunge'; e.modeT = 0.5; }
       if (e.mode === 'lunge' && dist < EEL.biteRange) { g.onBite(EEL.bite); e.mode = 'retreat'; e.modeT = EEL.retreat; }
@@ -248,6 +249,7 @@ export function createCombat(scene, camera, world, g) {
     get equipped() { return equipped; },
     get loaded() { return !shot; },
     get eels() { return eels; }, // for debugging and tests
+    setNight(n) { nightSight = 1 + n * 0.5; },
     /** Where the living eels are (for the threat sensor on the compass). */
     eelPositions: () => eels.filter((e) => e.alive).map((e) => e.segs[0].getWorldPosition(new THREE.Vector3())),
     setEquipped(v) { equipped = v; gun.visible = v; },

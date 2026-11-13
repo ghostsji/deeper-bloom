@@ -396,6 +396,34 @@ try {
   check('blight covers readouts, and the HUD warns about tears and ears', trouble.blighted && /TORN/.test(trouble.warn) && /BLIGHT/.test(trouble.warn), trouble.warn);
   check('tears and ear pressure hurt; H equalises', trouble.hurt > 0 && trouble.eased, `-${trouble.hurt.toFixed(2)} health`);
 
+  // Night and day, a current, the sinkhole and the giant.
+  const envR = await run(`
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const E = await import('./src/environment.js');
+    db.env.phase = 0.7;
+    db.camera.position.set(4, 12, 30);
+    await sleep(300);
+    const lamp = db.headlamp.intensity;
+    db.env.phase = 0.1;
+    const c = E.CURRENTS[0];
+    db.camera.position.set(c.x, 12, c.z);
+    await sleep(1000);
+    const drift = db.camera.position.z - c.z;
+    const hx = E.SINKHOLE.x, hz = E.SINKHOLE.z;
+    db.camera.position.set(hx, 10, hz);
+    const y0 = db.camera.position.y;
+    await sleep(1000);
+    const sank = y0 - db.camera.position.y;
+    db.camera.position.set(0, 12, 24);
+    db.env.forceGiant();
+    await sleep(300);
+    const giant = !!db.env.giantPos;
+    return { lamp, drift, sank, giant };`);
+  check('at night the visor light comes on', envR.lamp > 0, envR.lamp.toFixed(2));
+  check('currents push you along', envR.drift > 1, `${envR.drift.toFixed(1)} m`);
+  check('the sinkhole drags you down', envR.sank > 1, `${envR.sank.toFixed(1)} m`);
+  check('something big passes in the dark', envR.giant);
+
   const save = await run(`
     const raw = localStorage.getItem('deeperbloom-save-v1');
     const s = raw && JSON.parse(raw);

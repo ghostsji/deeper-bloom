@@ -566,3 +566,18 @@ export function earPop() {
   beep(t, 180, 90, 0.08, { type: 'sine', gain: 0.08 });
   beep(t + 0.09, 220, 110, 0.07, { type: 'sine', gain: 0.06 });
 }
+
+// The giant passing in the dark: a very low swell that comes and goes.
+let giantOsc = null, giantGain = null;
+export function giantDrone(on) {
+  if (!ctx) return;
+  if (!giantOsc) {
+    giantOsc = ctx.createOscillator(); giantGain = ctx.createGain();
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 120;
+    giantOsc.type = 'sawtooth'; giantOsc.frequency.value = 31; giantGain.gain.value = 0;
+    giantOsc.connect(lp); lp.connect(giantGain); giantGain.connect(sfx); giantOsc.start();
+  }
+  const t = ctx.currentTime;
+  giantGain.gain.setTargetAtTime(on ? 0.14 : 0, t, on ? 3 : 2);
+  giantOsc.frequency.setTargetAtTime(on ? 27 : 31, t, 4);
+}

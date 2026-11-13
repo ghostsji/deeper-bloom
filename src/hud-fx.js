@@ -241,6 +241,8 @@ export function createHudFx(root, systems) {
       for (const [q, at] of BLIGHTED) root.querySelector(q)?.classList.toggle('blighted', bl >= at);
       visor.style.setProperty('--ears', (st.ears ?? 0).toFixed(3));
       const tw = root.querySelector('#suitwarn');
+      const clk = root.querySelector('#clock');
+      if (st.clock && clk.textContent !== st.clock) clk.textContent = st.clock;
       const warn = [st.tears ? `SUIT TORN ×${st.tears}` : '', bl > 0.05 ? `BLIGHT ${Math.round(bl * 100)}%` : '', (st.ears ?? 0) > 0.4 ? 'EQUALISE' : ''].filter(Boolean).join(' · ');
       if (tw.textContent !== warn) tw.textContent = warn;
       tw.hidden = !warn;

@@ -24,11 +24,12 @@ import { createSuit, POWER } from './suit.js';
 import { createHazards } from './hazards.js';
 import { createOutpost, createWrecks, FUSES_NEEDED } from './outpost.js';
 import { createRewire } from './rewire.js';
+import { createEnvironment } from './environment.js';
 import { LOGS, FULL_MEMORY } from './logs.js';
 import { UPGRADES } from './suit.js';
 import { setTooltips } from './tooltips.js';
 import { keyName } from './controls.js';
-import { initAudio, updateAudio, setMusic, uiSound, pop, chime, thunk, salvagePing, rebootSound, glitchSound, staticSound, creakSound, glassCrackSound, bubbleSound, lowPowerSound, chargeSound, sparkSound, setEars, earPop, setPaused, gasp, heartbeat, warn, munch, sizzle, grab, harpoonFire, thud, hiss, bite, release, click } from './audio.js';
+import { initAudio, updateAudio, setMusic, uiSound, pop, chime, thunk, salvagePing, rebootSound, glitchSound, staticSound, creakSound, glassCrackSound, bubbleSound, lowPowerSound, chargeSound, sparkSound, setEars, earPop, giantDrone, setPaused, gasp, heartbeat, warn, munch, sizzle, grab, harpoonFire, thud, hiss, bite, release, click } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 const BLOOM_FULL = 60;   // Lumen gathered for the reef to glow at full strength
@@ -84,6 +85,14 @@ const hazards = createHazards(scene, world.jellies);
 // The sunken outpost (fuses, a console, electric grates, a vault) and two wrecks.
 const outpost = createOutpost(scene);
 createWrecks(scene);
+// Night and day, currents, the sinkhole, gas vents, and the giant.
+const env = createEnvironment(scene);
+// The visor's own light, for the dark. It's always in the scene (so adding it never makes the
+// renderer rebuild its shaders); at night it comes on and costs battery.
+const headlamp = new THREE.SpotLight(0xd8fff7, 0, 26, 0.5, 0.6, 1.4);
+headlamp.position.set(0, 0, 0);
+headlamp.target.position.set(0, 0, -1);
+camera.add(headlamp, headlamp.target);
 let fusesHeld = 0;
 const survival = createSurvival({
   onBlackout: blackout,
@@ -227,7 +236,7 @@ function gather(n, bright) {
 function save() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      lumen, builds: builder.serialize(), research: research.serialize(), survival: survival.serialize(), progress: progress.serialize(), tutorial: tutorial.serialize(), systems: systems.serialize(), apps: salvage.serialize(), suit: suit.serialize(), outpost: outpost.serialize(), fusesHeld,
+      lumen, builds: builder.serialize(), research: research.serialize(), survival: survival.serialize(), progress: progress.serialize(), tutorial: tutorial.serialize(), systems: systems.serialize(), apps: salvage.serialize(), suit: suit.serialize(), env: env.serialize(), outpost: outpost.serialize(), fusesHeld,
       satchel: satchel && { pos: satchel.pos.toArray(), items: satchel.items },
     }));
   } catch { /* not saved */ }
@@ -243,6 +252,7 @@ function load() {
     salvage.load(data.apps);
     suit.load(data.suit);
     outpost.load(data.outpost);
+    env.load(data.env);
     if (outpost.powered) salvage.unlockVault();
     fusesHeld = data.fusesHeld || 0;
     builder.load(data.builds);
@@ -784,6 +794,7 @@ function updateVisor(dt) {
   if (satchel) points.push(point('satchel', satchel.pos));
   if (systems.online('nav')) for (const pod of salvage.remaining()) points.push(point(pod.kind === 'app' ? 'pod' : pod.kind, pod.pos));
   if (systems.online('nav') && !outpost.powered) points.push(point('outpost', outpost.consolePos));
+  if (systems.online('sensor') && env.giantPos) points.push({ ...point('giant', env.giantPos), dist: null });
   if (systems.online('sensor')) for (const h of hazards.sources) { const at = h.pos(); if (at.distanceTo(p) < 45) points.push({ ...point('hazard', at), dist: null }); }
   if (systems.online('sensor')) for (const e of combat.eelPositions()) if (e.distanceTo(p) < 45) points.push({ ...point('eel', e), dist: null });
   // Silt makes the compass jitter.
@@ -829,7 +840,7 @@ function takeShock(where, dmg = 3) {
 onShock(({ where }) => takeShock(where));
 
 // ---- The suit: visor battery, pressure, live electricity --------------------------
-let silt = 0, surgeBlockedSaid = false, lastCamY = 0, earsWarned = false;
+let silt = 0, surgeBlockedSaid = false, lastCamY = 0, earsWarned = false, ventClock = 0, sinkSaid = false, nightSaid = false;
 addEventListener('keydown', (e) => { if (e.code === 'KeyH' && state === 'playing' && suit.equalise()) earPop(); });
 let creakClock = 3, bubbleClock = 0, sparkClock = 0, wasCharging = false, purgeHeld = false, purgeClock = 0;
 addEventListener('keydown', (e) => { if (e.code === 'KeyG') purgeHeld = true; });
@@ -837,6 +848,27 @@ addEventListener('keyup', (e) => { if (e.code === 'KeyG') purgeHeld = false; });
 addEventListener('blur', () => { purgeHeld = false; });
 function updateSuit(dt) {
   const depth = Math.max(0, SURFACE_Y - camera.position.y), surfaced = atSurface(), sealed = systems.online('visor');
+  // Night and day; currents, the sinkhole and vents push you about.
+  const under = camera.position.y < SURFACE_Y;
+  const envOut = env.update(dt, t, camera.position, { logsDone: salvage.count('log') === LOGS.length, exposed: under && !player.onFoot });
+  player.push(envOut.push, dt);
+  if (envOut.breath) survival.stats.breath = Math.min(100, survival.stats.breath + envOut.breath * dt);
+  if (envOut.inVent && (ventClock -= dt) <= 0) { bubbleSound(); ventClock = 0.25; }
+  if (envOut.inSinkhole && !sinkSaid) { sinkSaid = true; toast("A sinkhole! It's dragging you down into the deep. Swim hard up and out.", { color: '#ff8f8f' }); }
+  if (!envOut.inSinkhole) sinkSaid = false;
+  const night = env.night;
+  world.setNight(night);
+  combat.setNight(night);
+  headlamp.intensity = night > 0.05 && suit.power > 0 && under ? 2.6 * night : 0;
+  if (headlamp.intensity) suit.drain(0.12 * night * dt);
+  if (night > 0.5 && !nightSaid) { nightSaid = true; toast('Night is falling. Your visor light is on (it costs battery), and the eels see further in the dark.', { color: '#9fb8ff' }); }
+  if (night < 0.1) nightSaid = false;
+  if (envOut.giantStart) {
+    giantDrone(true);
+    staticSound(0.6);
+    if (systems.online('sensor')) toast('THREAT SENSOR: something very large, passing.', { color: '#ff8f8f' });
+  }
+  if (envOut.giantEnd) giantDrone(false);
   const sinkSpeed = Math.max(0, (lastCamY - camera.position.y) / Math.max(dt, 1e-3));
   lastCamY = camera.position.y;
   const ev = suit.update(dt, { depth, surfaced, onDeck: player.onFoot, sealed, dashing: player.dashing, breath: survival.stats.breath, sinkSpeed });
@@ -848,6 +880,7 @@ function updateSuit(dt) {
   if (suit.ears < 0.2) earsWarned = false;
   // With the UV flush researched, purging also burns blight off.
   if (purgeHeld && research.isUnlocked('uv')) suit.uvFlush(dt);
+  if (envOut.fog) suit.addFog(envOut.fog * dt);
   // Holding purge clears the fog, at a little battery.
   if (purgeHeld && suit.purge(dt) && (purgeClock -= dt) <= 0) { hiss(); purgeClock = 0.9; }
   if (ev.overheat) {
@@ -878,7 +911,7 @@ function updateSuit(dt) {
     if (camera.position.y < SURFACE_Y) survival.stats.breath = Math.max(0, survival.stats.breath - (100 / 45) * suit.leakBreathFactor() * dt);
     if ((bubbleClock -= dt) <= 0) { bubbleSound(); bubbleClock = 0.6 + Math.random() * 1.2; }
   }
-  hudFx.setSuit({ power: suit.power, charging: charging && suit.power < 100, unpowered: suit.unpowered, crackLayers: sealed ? 0 : suit.crackLayers, stress: suit.stress, leak: suit.leak, sealed, fog: suit.fog, heat: suit.heat, overheated: suit.overheated, blight: suit.blight, ears: suit.ears, tears: suit.tears, visorWet: suit.visorWet });
+  hudFx.setSuit({ power: suit.power, charging: charging && suit.power < 100, unpowered: suit.unpowered, crackLayers: sealed ? 0 : suit.crackLayers, stress: suit.stress, leak: suit.leak, sealed, fog: suit.fog, heat: suit.heat, overheated: suit.overheated, blight: suit.blight, ears: suit.ears, tears: suit.tears, visorWet: suit.visorWet, clock: `${env.night > 0.5 ? '☾' : '☀'} ${env.clock}` });
 
   // Live electricity: crackle as you get close, shock if you touch.
   const hz = hazards.update(dt, t, camera.position);
@@ -1064,7 +1097,7 @@ function frame() {
 
 
 // ?debug exposes the internals in the console.
-if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, systems, hudFx, salvage, suit, hazards, outpost, rewire, giveFuses: (n) => { fusesHeld += n; }, setSilt: (v) => { silt = v; }, getSilt: () => silt, addLumen: (n) => setLumen(lumen + n) } });
+if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, systems, hudFx, salvage, suit, hazards, outpost, rewire, env, headlamp, giveFuses: (n) => { fusesHeld += n; }, setSilt: (v) => { silt = v; }, getSilt: () => silt, addLumen: (n) => setLumen(lumen + n) } });
 
 renderBuildBar();
 load();

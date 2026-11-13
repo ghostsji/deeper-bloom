@@ -167,6 +167,8 @@ export function createPlayer(camera, canvas) {
     setStun(secs) { stun = Math.max(stun, secs); stunMax = Math.max(stun, 0.01); vel.multiplyScalar(0.3); },
     get stunned() { return stun > 0; },
     get dashing() { return dashing; },
+    /** Currents, sinkholes and vents: an acceleration on you this frame (not on a deck). */
+    push(a, dt) { if (!onFoot) vel.addScaledVector(a, dt); },
     get stunLeft() { return stun; },
     update(dt, t) {
       stun = Math.max(0, stun - dt);
