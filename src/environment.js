@@ -26,7 +26,8 @@ export const CURRENTS = [
   { x: -56, z: 10, r: 14, dir: [0, 0, 1], strength: 6 },
   { x: 50, z: -16, r: 12, dir: [-0.95, 0, 0.3], strength: 5 },
 ];
-export const SINKHOLE = { x: 12, z: -48, r: 7, pull: 7 };
+// Placed from the world seed by layout.js (these are the defaults before it runs).
+export const SINKHOLES = [{ x: 12, z: -48, r: 7, pull: 7 }];
 // ---- Gas vents: bursts of bubbles every 9 s, 4 s long ----
 export const VENTS = [[18, -8], [-8, 14], [-30, -30], [26, -36]].map(([x, z], i) => ({ x, z, phase: i * 2.3 }));
 export const VENT = { every: 9, on: 4, radius: 1.6, height: 8, breath: 30, fog: 0.3, lift: 9 };
@@ -49,14 +50,18 @@ export function createEnvironment(scene) {
     return { c, pos, seeds, geo };
   });
   // The sinkhole: a dark mouth on the sand and a slow spiral of grit going down it.
-  const hole = new THREE.Mesh(new THREE.CircleGeometry(SINKHOLE.r, 40), new THREE.MeshBasicMaterial({ color: 0x010405, transparent: true, opacity: 0.85 }));
-  hole.rotation.x = -Math.PI / 2;
-  hole.position.set(SINKHOLE.x, floorY(SINKHOLE.x, SINKHOLE.z) + 0.05, SINKHOLE.z);
-  scene.add(hole);
-  const grit = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(60 * 3), 3)),
-    new THREE.PointsMaterial({ color: 0xb8b090, size: 0.08, transparent: true, opacity: 0.7 }));
-  grit.frustumCulled = false;
-  scene.add(grit);
+  const holeMat = new THREE.MeshBasicMaterial({ color: 0x010405, transparent: true, opacity: 0.85 });
+  const gritMat = new THREE.PointsMaterial({ color: 0xb8b090, size: 0.08, transparent: true, opacity: 0.7 });
+  const holes = SINKHOLES.map((h) => {
+    const mesh = new THREE.Mesh(new THREE.CircleGeometry(h.r, 40), holeMat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(h.x, floorY(h.x, h.z) + 0.05, h.z);
+    scene.add(mesh);
+    const grit = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(60 * 3), 3)), gritMat);
+    grit.frustumCulled = false;
+    scene.add(grit);
+    return { h, mesh, grit };
+  });
   // Vent bubbles.
   const vents = VENTS.map((v) => {
     const y0 = floorY(v.x, v.z);
@@ -101,6 +106,7 @@ export function createEnvironment(scene) {
       for (const st of streaks) {
         const { c } = st, dx = p.x - c.x, dz = p.z - c.z, d = Math.hypot(dx, dz);
         if (exposed && d < c.r) push.add(tmp.set(...c.dir).multiplyScalar(c.strength * (1 - d / c.r)));
+        if (d > c.r + 90) continue;
         for (let i = 0; i < st.seeds.length; i++) {
           const [a, b, k] = st.seeds[i], f = (k + t * 0.12 * c.strength / 5) % 1;
           const ox = (a - 0.5) * c.r * 1.6, oz = (b - 0.5) * c.r * 1.6, along = (f - 0.5) * c.r * 1.8;
@@ -109,22 +115,26 @@ export function createEnvironment(scene) {
         }
         st.geo.attributes.position.needsUpdate = true;
       }
-      // The sinkhole: pulls you in and down.
-      const sx = SINKHOLE.x - p.x, sz = SINKHOLE.z - p.z, sd = Math.hypot(sx, sz);
-      if (exposed && sd < SINKHOLE.r * 1.6) {
-        const f = 1 - sd / (SINKHOLE.r * 1.6);
-        push.x += (sx / (sd || 1)) * 3 * f; push.z += (sz / (sd || 1)) * 3 * f;
-        if (sd < SINKHOLE.r) { push.y -= SINKHOLE.pull * f; out.inSinkhole = true; }
+      // Sinkholes: pull you in and down.
+      for (const { h, mesh, grit } of holes) {
+        const sx = h.x - p.x, sz = h.z - p.z, sd = Math.hypot(sx, sz);
+        if (exposed && sd < h.r * 1.6) {
+          const f = 1 - sd / (h.r * 1.6);
+          push.x += (sx / (sd || 1)) * 3 * f; push.z += (sz / (sd || 1)) * 3 * f;
+          if (sd < h.r) { push.y -= h.pull * f; out.inSinkhole = true; }
+        }
+        if (sd > 90) continue; // only animate the ones you could see
+        const gp = grit.geometry.attributes.position;
+        for (let i = 0; i < 60; i++) {
+          const a = t * 0.8 + i * 0.7, r = ((i * 0.37 + t * 0.15) % 1) * h.r;
+          gp.setXYZ(i, h.x + Math.cos(a) * r, mesh.position.y + 0.2 + r * 0.6, h.z + Math.sin(a) * r);
+        }
+        gp.needsUpdate = true;
       }
-      const gp = grit.geometry.attributes.position;
-      for (let i = 0; i < 60; i++) {
-        const a = t * 0.8 + i * 0.7, r = ((i * 0.37 + t * 0.15) % 1) * SINKHOLE.r;
-        gp.setXYZ(i, SINKHOLE.x + Math.cos(a) * r, hole.position.y + 0.2 + r * 0.6, SINKHOLE.z + Math.sin(a) * r);
-      }
-      gp.needsUpdate = true;
       // Vents.
       for (const vt of vents) {
-        const on = ventOn(vt.v, t);
+        const far = Math.hypot(p.x - vt.v.x, p.z - vt.v.z) > 90;
+        const on = ventOn(vt.v, t) && !far;
         vt.pts.visible = on;
         if (on) {
           for (let i = 0; i < vt.seeds.length; i++) {

@@ -408,8 +408,8 @@ try {
     const c = E.CURRENTS[0];
     db.camera.position.set(c.x, 12, c.z);
     await sleep(1000);
-    const drift = db.camera.position.z - c.z;
-    const hx = E.SINKHOLE.x, hz = E.SINKHOLE.z;
+    const drift = (db.camera.position.x - c.x) * c.dir[0] + (db.camera.position.z - c.z) * c.dir[2]; // along the flow
+    const hx = E.SINKHOLES[0].x, hz = E.SINKHOLES[0].z;
     db.camera.position.set(hx, 10, hz);
     const y0 = db.camera.position.y;
     await sleep(1000);

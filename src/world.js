@@ -3,15 +3,17 @@ import { perk } from './progress.js';
 
 // ---- The Shallows: tune here --------------------------------------------------
 export const SURFACE_Y = 26;
-export const WORLD_RADIUS = 105;   // the reef bowl's walls rise past this
+export const WORLD_RADIUS = 420;   // the atoll's walls rise past this (it was 105)
+export const REEF_RADIUS = 70;     // the familiar reef round Echo; procedural seabed beyond
 const FOG = 0x0a3a46;
 const SKY_FOG = 0x1a2c52;          // night air above the water
 const TINTS = { cyan: 0x5cf2d6, pink: 0xff8fd0, gold: 0xffc46b, violet: 0x8f7bff };
-const POLYP_COUNT = 46;
+const POLYP_COUNT = 260;
 const POLYP_RESPAWN = 25;           // seconds before a gathered polyp glows again
 const BRIGHT_POLYP_CHANCE = 0.12;   // golden polyps are worth 5 Lumen
 const KELP_REGROW = 90;             // seconds for a harvested strand to grow back
-const FISH_COUNT = 16;
+const FISH_COUNT = 56;
+const CORAL_COUNT = 420, ROCK_COUNT = 360, KELP_PATCHES = 95, JELLY_COUNT = 33;
 const FISH_RESPAWN = 60;
 const FISH_SKITTISH = { range: 4.5, speed: 2.5 }; // swim closer than this, faster than this, and they bolt
 const CATCH_REACH = 2.6;
@@ -21,22 +23,68 @@ const scannables = [];
 // Centres of the kelp patches (eels make their homes in them).
 const kelpPatches = [];
 
-// Seeded RNG so the reef is laid out the same every run.
-let seed = 7;
+// Seeded RNG and noise: each save has its own world seed (setWorldSeed, before buildWorld),
+// and the same seed always builds the same world.
+let seed = 7, noiseSeed = 7;
 const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+export function setWorldSeed(s) {
+  noiseSeed = (Math.abs(Math.floor(s)) % 2147483646) + 1;
+  seed = noiseSeed;
+}
+export const worldSeed = () => noiseSeed;
+
+// Smooth 2D value noise (-1..1) from the seed, and a few octaves of it.
+function hash(ix, iz) {
+  let h = Math.imul(ix, 374761393) ^ Math.imul(iz, 668265263) ^ Math.imul(noiseSeed, 1442695041);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295 * 2 - 1;
+}
+export function noise(x, z) {
+  const ix = Math.floor(x), iz = Math.floor(z), fx = x - ix, fz = z - iz;
+  const u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
+  const a = hash(ix, iz), b = hash(ix + 1, iz), c = hash(ix, iz + 1), d = hash(ix + 1, iz + 1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+const fbm = (x, z) => noise(x, z) * 0.55 + noise(x * 2.1 + 7, z * 2.1 - 3) * 0.28 + noise(x * 4.3 - 11, z * 4.3 + 5) * 0.17;
+const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const range = (a, b) => a + rand() * (b - a);
 const pick = (arr) => arr[(rand() * arr.length) | 0];
 
-// Seafloor height. Gentle dunes in the middle, rising into walls at the edge of the bowl
-// that break the surface as a ring of low sandy islands: the reef is an atoll's lagoon.
+// Seafloor height. Round Echo, the familiar reef: gentle dunes. Beyond it the seabed is
+// generated from the world seed: rolling plains, shallow banks that rise close to the surface,
+// and long trenches that drop far below the safe depth. At the edge of the atoll the floor
+// rises into walls that break the surface as a ring of sandy islands.
+export const DEEPEST = -34; // floor height of the deepest trench (60 m down)
 export function floorY(x, z) {
   const r = Math.hypot(x, z);
-  const dunes = 1.6 * Math.sin(x * 0.05) * Math.cos(z * 0.04)
+  const reef = 1.6 * Math.sin(x * 0.05) * Math.cos(z * 0.04)
     + 0.8 * Math.sin(x * 0.13 + z * 0.07)
     + 0.35 * Math.sin(x * 0.31 - z * 0.27);
-  const wall = Math.min(SURFACE_Y + 4, Math.max(0, r - 70) ** 2 * 0.02);
-  return dunes + wall;
+  let open = fbm(x / 150, z / 150) * 10 - 5
+    + 0.9 * Math.sin(x * 0.07 + z * 0.05) * Math.cos(z * 0.06)
+    + 0.4 * Math.sin(x * 0.19 - z * 0.23);
+  // Trenches follow the ridge lines of a second noise field; banks rise where a third peaks.
+  const ridge = 1 - Math.abs(noise(x / 240 + 40, z / 240 - 25));
+  open -= smooth(0.8, 0.96, ridge) * 28;
+  open += smooth(0.45, 0.8, noise(x / 95 + 17, z / 95 + 61)) * 20;
+  const blend = smooth(REEF_RADIUS - 15, REEF_RADIUS + 45, r);
+  const y = Math.min(SURFACE_Y - 3, Math.max(DEEPEST, reef * (1 - blend) + open * blend));
+  // The atoll's wall: whatever the seabed does near the edge, it rises out of the water.
+  const wall = smooth(WORLD_RADIUS - 45, WORLD_RADIUS - 8, r);
+  return y + (SURFACE_Y + 4 - y) * wall;
 }
+
+// Scatter helper: a point uniformly over a ring of the world, retried until accept(x, z, y).
+function scatter(rMin, rMax, accept = () => true, tries = 30) {
+  let x = 0, z = 0;
+  for (let k = 0; k < tries; k++) {
+    const a = range(0, Math.PI * 2), r = Math.sqrt(range(rMin * rMin, rMax * rMax));
+    x = Math.cos(a) * r; z = Math.sin(a) * r;
+    if (accept(x, z, floorY(x, z))) break;
+  }
+  return [x, z];
+}
+const LIVE = WORLD_RADIUS - 55; // where life thins out before the atoll's walls
 
 export function buildWorld(scene) {
   const time = { value: 0 };
@@ -99,6 +147,8 @@ export function buildWorld(scene) {
       surface.under.visible = !above;
       snow.points.visible = !above;
       snow.update(dt, camera);
+      sky.position.set(camera.position.x, 0, camera.position.z);
+      rays.position.set(camera.position.x, 0, camera.position.z);
       school.update(dt, t);
       jellies.update(t);
       echo.update(t);
@@ -151,16 +201,17 @@ export function segDist(p, a, b) {
 }
 
 function addFloor(scene) {
-  const size = 280, segs = 180;
+  const size = WORLD_RADIUS * 2 + 40, segs = 400;
   const geo = new THREE.PlaneGeometry(size, size, segs, segs);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position, colors = [];
-  const sand = new THREE.Color(0x2f6a68), dark = new THREE.Color(0x0e2f36), dry = new THREE.Color(0x8c7f63), c = new THREE.Color();
+  const sand = new THREE.Color(0x2f6a68), dark = new THREE.Color(0x0e2f36), dry = new THREE.Color(0x8c7f63), abyss = new THREE.Color(0x030b10), c = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i), y = floorY(x, z);
     pos.setY(i, y);
     const n = 0.5 + 0.5 * Math.sin(x * 0.21 + Math.cos(z * 0.17) * 2);
     c.copy(sand).lerp(dark, Math.min(1, n * 0.6 + Math.max(0, y - 2) * 0.05));
+    if (y < -4) c.lerp(abyss, Math.min(1, (-4 - y) / 24)); // trenches fade to black
     if (y > SURFACE_Y - 1.5) c.copy(dry).lerp(dark, n * 0.25); // dry island sand
     colors.push(c.r, c.g, c.b);
   }
@@ -189,14 +240,14 @@ function blotchTexture() {
 // Two one-sided sheets at the waterline: the bright shimmer you see from below, and the
 // dark night water you see from above (with the reef's glow faintly showing through).
 function addSurface(scene, time) {
-  const tex = blotchTexture(); tex.repeat.set(18, 18);
-  const geo = new THREE.PlaneGeometry(400, 400);
+  const tex = blotchTexture(); tex.repeat.set(54, 54);
+  const geo = new THREE.PlaneGeometry(WORLD_RADIUS * 2.6, WORLD_RADIUS * 2.6);
   const under = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xa8fff4, map: tex, transparent: true, opacity: 0.7, depthWrite: false }));
   under.rotation.x = Math.PI / 2;
   under.position.y = SURFACE_Y;
   under.onBeforeRender = () => { tex.offset.set(time.value * 0.01, time.value * 0.006); };
   scene.add(under);
-  const topTex = tex.clone(); topTex.repeat.set(30, 30);
+  const topTex = tex.clone(); topTex.repeat.set(90, 90);
   const top = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
     color: 0x05202a, emissive: 0x1d7f80, emissiveMap: topTex, emissiveIntensity: 0.5,
     roughness: 0.6, metalness: 0, transparent: true, opacity: 0.92, depthWrite: false,
@@ -234,14 +285,14 @@ function addRays(scene, time) {
 
 function addRocks(scene) {
   const mat = new THREE.MeshStandardMaterial({ color: 0x1b3a40, roughness: 0.95, flatShading: true });
-  for (let i = 0; i < 55; i++) {
+  for (let i = 0; i < ROCK_COUNT; i++) {
     const geo = new THREE.IcosahedronGeometry(1, 1);
     const p = geo.attributes.position;
     for (let j = 0; j < p.count; j++) p.setXYZ(j, p.getX(j) * range(0.75, 1.25), p.getY(j) * range(0.75, 1.25), p.getZ(j) * range(0.75, 1.25));
     geo.computeVertexNormals();
     const rock = new THREE.Mesh(geo, mat);
-    const a = range(0, Math.PI * 2), r = range(8, 80), x = Math.cos(a) * r, z = Math.sin(a) * r;
-    const s = range(0.8, 3.6);
+    const [x, z] = i < 55 ? scatter(8, 80) : scatter(80, LIVE);
+    const s = range(0.8, i < 55 ? 3.6 : 5);
     rock.scale.set(s * range(1, 1.8), s * range(0.5, 1), s);
     rock.position.set(x, floorY(x, z) + s * 0.2, z);
     rock.rotation.set(range(0, 3), range(0, 3), range(0, 3));
@@ -261,8 +312,9 @@ function addCoral(scene) {
   const branch = new THREE.CylinderGeometry(0.06, 0.14, 1, 6); branch.translate(0, 0.5, 0);
   const tip = new THREE.SphereGeometry(0.11, 8, 6);
   const brain = new THREE.SphereGeometry(1, 18, 12);
-  for (let i = 0; i < 70; i++) {
-    const a = range(0, Math.PI * 2), r = range(4, 75), x = Math.cos(a) * r, z = Math.sin(a) * r;
+  for (let i = 0; i < CORAL_COUNT; i++) {
+    // Coral likes the reef and the shallow banks; it's sparse in deep water.
+    const [x, z] = i < 70 ? scatter(4, 75) : scatter(75, LIVE, (_x, _z, y) => y > -2 || rand() < 0.15);
     const tint = pick(Object.values(TINTS)), m = coralMat(tint);
     const cluster = new THREE.Group();
     cluster.position.set(x, floorY(x, z) - 0.1, z);
@@ -306,12 +358,13 @@ function addKelp(scene, time) {
       transformed.x += sin(uTime * 1.1 + ph + position.y * 0.35) * 0.7 * h * h;
       transformed.z += cos(uTime * 0.8 + ph + position.y * 0.3) * 0.5 * h * h;`);
   };
-  const count = 260, kelp = new THREE.InstancedMesh(geo, mat, count), m = new THREE.Matrix4();
+  const count = KELP_PATCHES * 16, kelp = new THREE.InstancedMesh(geo, mat, count), m = new THREE.Matrix4();
   const q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3();
   let i = 0;
   // Kelp grows in patches.
-  for (let patch = 0; patch < 18 && i < count; patch++) {
-    const a = range(0, Math.PI * 2), r = range(15, 78), cx = Math.cos(a) * r, cz = Math.sin(a) * r;
+  for (let patch = 0; patch < KELP_PATCHES && i < count; patch++) {
+    // Kelp forests: middling depths, never in the trenches.
+    const [cx, cz] = patch < 18 ? scatter(15, 78) : scatter(78, LIVE, (_x, _z, y) => y > -10 && y < 14);
     kelpPatches.push(new THREE.Vector3(cx, floorY(cx, cz), cz));
     for (let k = 0; k < 15 && i < count; k++, i++) {
       const x = cx + range(-5, 5), z = cz + range(-5, 5);
@@ -415,7 +468,7 @@ function addJellies(scene) {
   const bellMat = new THREE.MeshStandardMaterial({ color: TINTS.pink, emissive: TINTS.pink, emissiveIntensity: 0.9, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false });
   const tentMat = new THREE.LineBasicMaterial({ color: TINTS.pink, transparent: true, opacity: 0.5 });
   const jellies = [];
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < JELLY_COUNT; i++) {
     const j = new THREE.Group();
     j.add(new THREE.Mesh(bellGeo, bellMat));
     for (let k = 0; k < 7; k++) {
@@ -423,8 +476,8 @@ function addJellies(scene) {
       for (let s = 0; s <= 8; s++) pts.push(new THREE.Vector3(Math.cos(a) * 0.5, -s * 0.35, Math.sin(a) * 0.5 + Math.sin(s) * 0.1));
       j.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), tentMat));
     }
-    const a = range(0, Math.PI * 2), r = range(10, 55);
-    j.userData = { x: Math.cos(a) * r, z: Math.sin(a) * r, y: range(9, 18), phase: range(0, 6) };
+    const [jx, jz] = i < 9 ? scatter(10, 55) : scatter(55, LIVE);
+    j.userData = { x: jx, z: jz, y: Math.min(SURFACE_Y - 3, floorY(jx, jz) + range(6, 14)), phase: range(0, 6) };
     j.userData.scan = { species: 'jelly', id: `jelly:${i}` };
     scannables.push(j);
     scene.add(j);
@@ -453,7 +506,8 @@ function addPolyps(scene) {
   const polyps = [];
   for (let i = 0; i < POLYP_COUNT; i++) {
     const bright = rand() < BRIGHT_POLYP_CHANCE;
-    const a = range(0, Math.PI * 2), r = range(5, 72), x = Math.cos(a) * r, z = Math.sin(a) * r;
+    // Most polyps grow on the reef; the rest are scattered across the seabed to find.
+    const [x, z] = i < 46 ? scatter(5, 72) : scatter(72, LIVE, (_x, _z, y) => y > -14);
     const p = new THREE.Group();
     p.position.set(x, floorY(x, z) - 0.05, z);
     p.add(new THREE.Mesh(stalkGeo, stalkMat));
@@ -539,7 +593,7 @@ function addSilverfin(scene) {
     const b = new THREE.Mesh(body, mat); b.scale.set(0.1, 0.14, 0.3);
     const t = new THREE.Mesh(tail, mat); t.position.z = -0.36;
     g.add(b, t);
-    const a = range(0, Math.PI * 2), r = range(10, 65), x = Math.cos(a) * r, z = Math.sin(a) * r;
+    const [x, z] = i < 16 ? scatter(10, 65) : scatter(65, LIVE, (_x, _z, y) => y > -12);
     const home = new THREE.Vector3(x, floorY(x, z) + range(1.5, 4), z);
     g.position.copy(home);
     g.userData = { home, vel: new THREE.Vector3(), phase: range(0, 6), flee: 0, back: 0, tail: t };

@@ -3,15 +3,16 @@ import { floorY, SURFACE_Y } from './world.js';
 import { CABLE_SITES, cableEnd } from './hazards.js';
 import { OUTPOST_SPOTS, WRECKS, wreckSpot } from './outpost.js';
 import { LOGS } from './logs.js';
+import { SPOTS } from './layout.js';
 
 // Phone apps the flood washed out of your phone. Each one's module lies somewhere on the reef
 // in a salvage pod: a blinking capsule under a faint beam of light that reaches up to the
 // surface, so you can spot it from a distance. Swim into a pod to put its app back.
 export const APPS = [
-  { id: 'codex', name: 'Codex', where: 'On the sand just off the reef, ahead of where you first dive in.' },
-  { id: 'status', name: 'Status', where: 'Among the rocks west of the reef.' },
-  { id: 'goals', name: 'Goals', where: 'Out on the dunes to the north-east.' },
-  { id: 'skills', name: 'Skills', where: 'Deep in a kelp patch. Eels may be guarding it.' },
+  { id: 'codex', name: 'Codex', where: 'Close by: within about 20 m of where you first dive in.' },
+  { id: 'status', name: 'Status', where: 'A short swim out from the reef, 35 to 70 m from Echo. Follow its light beam.' },
+  { id: 'goals', name: 'Goals', where: 'Further out, 85 to 140 m from Echo.' },
+  { id: 'skills', name: 'Skills', where: 'Deep in a far kelp forest, well over 100 m out. Eels nest there.' },
 ];
 export const APP_IDS = APPS.map((a) => a.id);
 // Spare power cells for the visor battery, lying beside two of the live cables.
@@ -39,9 +40,9 @@ const PICKUP = 2.4;
 // Where each pod lies. Skills goes in a far kelp patch (where eels nest) to make it a trip.
 function spots(kelpPatches) {
   const at = (x, z) => new THREE.Vector3(x, floorY(x, z) + 0.9, z);
-  const far = [...kelpPatches].filter((p) => Math.hypot(p.x, p.z) < 66)
-    .sort((a, b) => Math.hypot(b.x, b.z - 24) - Math.hypot(a.x, a.z - 24))[0];
-  const spot = { codex: at(7, 11), status: at(-26, -2), goals: at(30, -24), skills: far ? at(far.x + 1.5, far.z) : at(-34, -40) };
+  // Placed from the world seed (layout.js): Codex close by, the rest further and further out.
+  const S = (k, fx, fz) => (SPOTS[k] ? at(SPOTS[k].x, SPOTS[k].z) : at(fx, fz));
+  const spot = { codex: S('codex', 7, 11), status: S('status', -26, -2), goals: S('goals', 30, -24), skills: S('skills', -34, -40) };
   // Cells: 2.6 m to the side of a sparking cable end, so you can reach one without touching it.
   for (const c of CELLS) {
     const site = CABLE_SITES[c.site], end = cableEnd(site), side = site.ang + Math.PI / 2;
@@ -55,7 +56,7 @@ function spots(kelpPatches) {
   spot['pod-log3'] = wreckSpot(1, 1);
   spot['pod-log4'] = OUTPOST_SPOTS.vaultLog2();
   spot['pod-log5'] = at(3, 3.5);       // beside Echo's pearl
-  spot['pod-log6'] = at(42, -40);      // out on the far rocks
+  spot['pod-log6'] = S('far', 42, -40); // out at the far edge of the atoll
   spot.screen = wreckSpot(1, 2);
   return spot;
 }

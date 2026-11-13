@@ -3,7 +3,8 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { buildWorld, SURFACE_Y, floorY } from './world.js';
+import { buildWorld, SURFACE_Y, floorY, setWorldSeed } from './world.js';
+import { applyLayout } from './layout.js';
 import { createPlayer } from './player.js';
 import { createBuilder, PIECES, FARM_MAX } from './build.js';
 import { createSurvival, ITEMS, GEAR, gearMax, bagSize } from './survival.js';
@@ -54,7 +55,14 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 400);
 camera.position.set(0, 7, 24);
 
+// The world seed: a saved game keeps its own (older saves had the one hand-built reef, seed
+// 7); with no save, a new world is rolled.
+let savedGame = null;
+try { savedGame = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch { /* none */ }
+const worldSeed = savedGame ? savedGame.seed ?? 7 : 1 + Math.floor(Math.random() * 2147483000);
+setWorldSeed(worldSeed);
 const world = buildWorld(scene);
+applyLayout(worldSeed, world.kelpPatches); // the outpost, wrecks, cables, vents... from the seed
 const player = createPlayer(camera, canvas);
 // The tutorial in the corner: steps finish from lifetime stats plus these notes.
 const tutorial = createTutorial(progress.stat);
@@ -243,7 +251,7 @@ function gather(n, bright) {
 function save() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      lumen, builds: builder.serialize(), research: research.serialize(), survival: survival.serialize(), progress: progress.serialize(), tutorial: tutorial.serialize(), systems: systems.serialize(), apps: salvage.serialize(), suit: suit.serialize(), env: env.serialize(), pearlLevel, hasScreen, phoneFixed, endingSeen, boostersMade, outpost: outpost.serialize(), fusesHeld,
+      seed: worldSeed, lumen, builds: builder.serialize(), research: research.serialize(), survival: survival.serialize(), progress: progress.serialize(), tutorial: tutorial.serialize(), systems: systems.serialize(), apps: salvage.serialize(), suit: suit.serialize(), env: env.serialize(), pearlLevel, hasScreen, phoneFixed, endingSeen, boostersMade, outpost: outpost.serialize(), fusesHeld,
       satchel: satchel && { pos: satchel.pos.toArray(), items: satchel.items },
     }));
   } catch { /* not saved */ }
@@ -1226,6 +1234,9 @@ function frame() {
   hudFx.text($('depth'), player.onFoot ? 'On deck' : depth < 0.3 ? 'Surface' : `${depth.toFixed(1)} m`, 'depth');
   updateVisor(dt);
   updateAudio(depth, camera.position.y > SURFACE_Y || state === 'title'); // menus aren't muffled
+  // The fog hides everything far off underwater, so don't draw it (a big world stays fast).
+  const far = camera.position.y > SURFACE_Y ? 900 : 150;
+  if (camera.far !== far) { camera.far = far; camera.updateProjectionMatrix(); }
   // A wet phone: apps crash now and then while it's out.
   if (state === 'phone' && suit.phoneWet > 0.2 && Math.random() < suit.phoneWet * 0.06 * dt) {
     phone.crash();
@@ -1238,7 +1249,7 @@ function frame() {
 
 
 // ?debug exposes the internals in the console.
-if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, systems, hudFx, salvage, suit, hazards, outpost, rewire, env, headlamp, phone, feedPearl, setScreen: () => { hasScreen = true; }, getPearl: () => pearlLevel, getSignal: () => signal, isFixed: () => phoneFixed, giveFuses: (n) => { fusesHeld += n; }, setSilt: (v) => { silt = v; }, getSilt: () => silt, addLumen: (n) => setLumen(lumen + n) } });
+if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { worldSeed, renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, systems, hudFx, salvage, suit, hazards, outpost, rewire, env, headlamp, phone, feedPearl, setScreen: () => { hasScreen = true; }, getPearl: () => pearlLevel, getSignal: () => signal, isFixed: () => phoneFixed, giveFuses: (n) => { fusesHeld += n; }, setSilt: (v) => { silt = v; }, getSilt: () => silt, addLumen: (n) => setLumen(lumen + n) } });
 
 renderBuildBar();
 load();

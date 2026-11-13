@@ -6,7 +6,7 @@ import { perk } from './progress.js';
 export const HARPOON_MAX = 30;     // shots before the harpoon needs repairing
 const SPEAR = { speed: 26, drag: 0.9, sink: 2, range: 20, damage: 35, reel: 0.45 };
 const EEL = {
-  count: 4, health: 100, segments: 16, spacing: 0.32,
+  count: 14, health: 100, segments: 16, spacing: 0.32,
   idle: 2, chase: 5.2, lunge: 9.5,   // m/s (you swim about 5.4, 12 dashing)
   sight: 14, leash: 32, lungeRange: 4.2, biteRange: 1.6, bite: 18, retreat: 2.2,
   respawn: 120, safeFromSpawn: 26,   // eels never nest this close to where you start

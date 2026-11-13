@@ -6,13 +6,14 @@ import { floorY } from './world.js';
 // close and it shocks you (the same shock as touching cracked glass). The power cells you want
 // lie near the cables, so getting them is a risk.
 
-export const LIVE_JELLIES = [1, 4, 7];        // which of the reef's jellies are electric
+export const LIVE_JELLIES = { every: 3 };   // every third jelly is electric
 export const JELLY_RANGE = 2;                 // metres from a live jelly's bell
 export const SPARK_RANGE = 1.7;               // metres from a cable's frayed end
 // Power surges: every so often current pulses down every cable. A glowing pulse runs along
 // each one, the frayed ends reach three times as far, and nearby pods can't be reached.
 export const SURGE = { every: [40, 80], warn: 2, length: 4, reach: 3, podRadius: 5 };
-// Broken cables: a junction box at (x, z), and the cable running off at angle ang.
+// Broken cables: a junction box at (x, z), and the cable running off at angle ang. Placed from
+// the world seed by layout.js (three round the outpost); these are the defaults.
 export const CABLE_SITES = [
   { x: -20, z: -12, ang: 0.4 },
   { x: 24, z: 6, ang: 2.2 },
@@ -59,7 +60,7 @@ export function createHazards(scene, jellies) {
   const sources = [];
 
   // ---- Electric jellies ----
-  for (const idx of LIVE_JELLIES) {
+  for (let idx = 1; idx < jellies.length; idx += LIVE_JELLIES.every) {
     const j = jellies[idx];
     if (!j) continue;
     j.traverse((o) => {
@@ -152,6 +153,8 @@ export function createHazards(scene, jellies) {
       if (regen) arcClock = 0.06;
       let hit = null, nearest = Infinity;
       for (const s of sources) {
+        const away = s.pos().distanceTo(playerPos);
+        if (away > 90) { nearest = Math.min(nearest, away); continue; } // too far off to see
         // Arcs come in bursts, so the charge flickers.
         const burst = Math.sin(t * 7.3 + s.range * 10 + sources.indexOf(s)) > -0.2 || Math.random() < 0.1;
         if (regen) s.arcs.regen(burst);

@@ -27,6 +27,10 @@ npm run verify
 - `npm test`: unit tests for progression and survival (`test/*.test.js`, Node's built-in test runner).
 - `npm run smoke`: boots the real game in an off-screen Electron window with a throwaway profile (your save is never touched), then starts a new game, swims, opens every phone tab, scans, climbs a raft, earns goals, learns a skill, saves, pauses, saves to a slot, opens every Options tab, rebinds a key, goes to the main menu and loads the slot back. Fails on any page error.
 
+## The world
+
+Every new game generates its own world from a seed (saved with the game; older saves keep seed 7). The atoll is 840 m across, about 16 times the old reef's area. Round Echo the familiar reef stays the same in every world; beyond it the seabed is noise-generated: rolling plains, shallow banks that rise close to the surface, kelp forests at middling depths, and long trenches down to 60 m, far below the safe depth for a cracked visor. The atoll's walls break the surface at the edge. `src/layout.js` places everything that used to be hand-built from the same seed, with spacing and depth rules: the outpost (on flat sand, 22-38 m down, 110-210 m out, with three live cables round it), six wrecks, eight cables, seven currents, four sinkholes, sixteen gas vents and the app pods (Codex close by, the others further and further out). Life is scattered over the whole seabed (260 polyps, 420 coral, 95 kelp forests, 33 jellies, 56 silverfin, 14 eels). Underwater the camera only draws what the fog leaves visible (150 m), so the bigger world stays fast.
+
 ## Menus
 
 Main menu: Continue (your last game), New game (asks first if it would replace one), Load game, Save game, Options, Exit. Save slots (three) are files in the app's user data folder (`saves/slot1.json`...; in a browser, localStorage). Pause (Esc or P): Resume, Save game, Options, Main menu, Quit to desktop. Loading or starting over lands on a "Ready to dive" card, since the mouse can only be captured after a click.
