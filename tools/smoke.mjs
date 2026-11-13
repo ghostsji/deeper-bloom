@@ -143,31 +143,46 @@ try {
   check('swimming into a salvage pod recovers its app', apps.found && !apps.missing1.includes('codex') && apps.missing1.length === 3 && apps.saved?.includes('codex'), apps.missing1.join());
   check('a missing app shows where to look', apps.page === 'Skills');
 
-  // Touching cracked glass shocks you (a little health, a lightning burst), on the visor and the phone.
+  // Touching cracked glass shocks you: a little health, a stun that makes you sink, and the
+  // phone knocked offline for a few seconds.
   const shock = await run(`
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const touch = (path) => {
       const pt = path.getPointAtLength(path.getTotalLength() / 2).matrixTransform(path.getScreenCTM());
       path.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: pt.x, clientY: pt.y }));
     };
+    const tab = () => { dispatchEvent(new KeyboardEvent('keydown', { code: 'Tab' })); dispatchEvent(new KeyboardEvent('keyup', { code: 'Tab' })); };
     const health = () => db.survival.stats.health;
-    const h0 = health();
-    touch(document.querySelector('#visor .crack-hit path'));
-    const zap = !!document.querySelector('.zap');
-    await sleep(600);
-    const h1 = health();
-    dispatchEvent(new KeyboardEvent('keydown', { code: 'Tab' }));
-    dispatchEvent(new KeyboardEvent('keyup', { code: 'Tab' }));
+    db.camera.position.set(0, 12, 20); // mid-water, so there's room to sink
+    tab();
     await sleep(300);
+    const h0 = health();
     touch(document.querySelector('#phone .crack-hit path'));
+    const zap = !!document.querySelector('.zap');
+    await sleep(150);
+    const phoneClosed = !document.getElementById('phone').classList.contains('up');
+    const stunned = db.player.stunned;
+    const y0 = db.camera.position.y;
+    await sleep(1200);
+    const sank = y0 - db.camera.position.y;
+    const note = document.getElementById('stunnote').textContent;
+    tab();
+    await sleep(300);
+    const phoneBlocked = !document.getElementById('phone').classList.contains('up');
+    const h1 = health();
+    touch(document.querySelector('#visor .crack-hit path'));
     await sleep(100);
     const h2 = health();
-    dispatchEvent(new KeyboardEvent('keydown', { code: 'Tab' }));
-    dispatchEvent(new KeyboardEvent('keyup', { code: 'Tab' }));
-    await sleep(200);
-    return { zap, visor: h0 - h1, phone: h1 - h2 };`);
-  check('touching a cracked visor shocks you', shock.zap && shock.visor > 0, `-${shock.visor} health`);
-  check('touching the cracked phone screen shocks you', shock.phone > 0, `-${shock.phone} health`);
+    await sleep(2600);
+    const recovered = !db.player.stunned;
+    await sleep(1500); // let the sinking drift settle before the next test
+    return { recovered, zap, phone: h0 - h1, visor: h1 - h2, phoneClosed, stunned, sank, note, phoneBlocked };`);
+  check('touching the cracked phone screen shocks you', shock.zap && shock.phone > 0, `-${shock.phone.toFixed(1)} health`);
+  check('touching a cracked visor shocks you', shock.visor > 0, `-${shock.visor.toFixed(1)} health`);
+  check('a shock drops the phone and stuns you', shock.phoneClosed && shock.stunned && /STUNNED/.test(shock.note), shock.note);
+  check('while stunned you sink', shock.sank > 0.5, `${shock.sank.toFixed(2)} m`);
+  check('the phone stays offline for a while after a shock', shock.phoneBlocked);
+  check('the stun wears off', shock.recovered);
 
   const scan = await run(`
     db.camera.position.set(0, 2.6, 6);

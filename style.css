@@ -428,3 +428,16 @@ kbd { display: inline-block; min-width: 1em; margin: 0 1px; padding: 0 6px; bord
 @keyframes zapflash { 0% { opacity: 1; } 15% { opacity: .3; } 25% { opacity: .9; } 100% { opacity: 0; } }
 html.jolt body { animation: jolt .32s linear; }
 @keyframes jolt { 0% { transform: translate(0); } 15% { transform: translate(-6px, 3px); } 30% { transform: translate(5px, -4px); } 45% { transform: translate(-4px, -2px); } 60% { transform: translate(3px, 3px); } 80% { transform: translate(-1px, 1px); } 100% { transform: none; } }
+
+/* ---- Stunned by a shock ---- */
+body.stunned #view { filter: saturate(.35) brightness(.85) contrast(1.15); }
+body.stunned #hud::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 35%, rgba(120, 200, 255, .18) 70%, rgba(20, 40, 90, .55) 100%); animation: stunpulse .18s steps(2) infinite; }
+@keyframes stunpulse { 50% { opacity: .55; } }
+.stunnote { position: absolute; left: 50%; top: calc(50% + 70px); transform: translateX(-50%); text-align: center; font-family: var(--mono); letter-spacing: .14em; }
+.stunnote b { display: block; font: 600 18px 'Unbounded', sans-serif; letter-spacing: .2em; color: #9fe8ff; text-shadow: 0 0 14px #6fd3ff; animation: flick 1.1s infinite steps(1); }
+.stunnote b.phone { font-size: 13px; color: #ff8f8f; text-shadow: none; }
+.stunnote span { font-size: 12px; color: var(--sub); }
+/* The phone dying in your hand as it drops away. */
+.phone.dead .phone-screen::after { content: ''; position: absolute; inset: 0; z-index: 5; background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, .12) 0 2px, transparent 2px 4px), #020608; animation: vfuzz .08s steps(2) infinite; }

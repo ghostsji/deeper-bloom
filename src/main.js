@@ -463,6 +463,11 @@ const phone = createPhone($('phone'), {
 });
 
 function openPhone(tab) {
+  if (phoneDown() > 0) {
+    toast(`Your phone is still rebooting after that shock (${Math.ceil(phoneDown())} s).`, { color: '#9fe8ff' });
+    click();
+    return;
+  }
   setLens(false);
   if (document.pointerLockElement) document.exitPointerLock();
   tutorial.note('phone');
@@ -496,7 +501,7 @@ function renderBuildBar() {
     : 'Swim up to the surface to build · X to stop';
 }
 addEventListener('mousedown', (e) => {
-  if (state !== 'playing') return;
+  if (state !== 'playing' || player.stunned) return; // stunned: your hands won't work either
   const building = placing && atSurface();
   if (e.button === 2) {
     if (building) { if (builder.remove()) thunk(true); } else setLens(true);
@@ -554,7 +559,7 @@ function setState(s) {
   $('hud').hidden = s === 'title';
   setPaused(s !== 'playing' && s !== 'title'); // menu music plays at full volume
   pauseVoice(s !== 'playing' && s !== 'blackout');
-  if (s !== 'playing') { player.clearKeys(); setLens(false); }
+  if (s !== 'playing') { player.clearKeys(); setLens(false); document.body.classList.remove('stunned'); $('stunnote').hidden = true; }
 }
 
 // ---- Main menu, pause menu and save slots ----------------------------------------
@@ -654,9 +659,9 @@ addEventListener('keydown', (e) => {
   else if ((e.code === 'Tab' || e.code === 'KeyJ') && state === 'phone') engage();
   else if (e.code === 'KeyJ' && state === 'playing') openPhone('codex');
   if (e.code === 'KeyX' && state === 'playing' && placing) stopPlacing();
-  if (e.code === 'Digit1' && state === 'playing') toggleHarpoon();
-  if (e.code === 'KeyF' && state === 'playing' && !lensOn && usable()) use(usable());
-  if (e.code === 'KeyR' && state === 'playing') eat();
+  if (e.code === 'Digit1' && state === 'playing' && !player.stunned) toggleHarpoon();
+  if (e.code === 'KeyF' && state === 'playing' && !player.stunned && !lensOn && usable()) use(usable());
+  if (e.code === 'KeyR' && state === 'playing' && !player.stunned) eat();
   // Esc can't re-lock the mouse (browsers don't count it as a gesture), so it goes to the pause screen.
   if (e.code === 'Escape' && state === 'phone') setState('paused');
   // Cursor-look fallback has no pointer lock to lose, so Esc pauses directly.
@@ -720,14 +725,39 @@ function updateVisor(dt) {
 
 // ---- Touching the cracks --------------------------------------------------------------
 // The broken glass is live: touching a crack (visor or phone) shocks you for a little health.
-let shocked = 0;
+// It also stuns you (you go limp and sink) and knocks the phone offline for a few seconds.
+const STUN_SECS = 2.5, PHONE_DOWN_SECS = 6;
+let shocked = 0, phoneDownUntil = 0;
+const phoneDown = () => Math.max(0, phoneDownUntil - playTime);
 onShock(({ where }) => {
   if (state !== 'playing' && state !== 'phone') return;
   survival.damage(3);
   hurtFlash();
   progress.track('shocks');
+  phoneDownUntil = playTime + PHONE_DOWN_SECS;
+  // The phone dies in your hand and drops away. (This runs inside the click, so the mouse
+  // can be captured again straight away.)
+  if (state === 'phone') {
+    $('phone').classList.add('dead');
+    setTimeout(() => $('phone').classList.remove('dead'), 700);
+    engage();
+  }
+  setLens(false);
+  scanHeld = false;
+  player.setStun(STUN_SECS);
   if (shocked++ < 2) toast(where === 'phone' ? "Zap! The phone's cracked screen is live. Keep your fingers off the cracks." : "Zap! The cracked visor is live. Don't touch the cracks.", { color: '#9fe8ff' });
 });
+// The STUNNED / PHONE REBOOTING readout and the stun overlay.
+function updateStun() {
+  const stunned = state === 'playing' && player.stunned, down = phoneDown();
+  document.body.classList.toggle('stunned', stunned);
+  const note = $('stunnote');
+  note.hidden = !(state === 'playing' && (stunned || down > 0));
+  if (note.hidden) return;
+  const html = stunned ? `<b>STUNNED</b><span>you're sinking: ${player.stunLeft.toFixed(1)} s</span>`
+    : `<b class="phone">PHONE REBOOTING</b><span>back in ${Math.ceil(down)} s</span>`;
+  if (note.innerHTML !== html) note.innerHTML = html;
+}
 
 // ---- Salvage pods (lost phone apps) ---------------------------------------------------
 let pingClock = 0;
@@ -769,6 +799,7 @@ function frame() {
     if (atSurface()) { echoSay('surface'); tutorial.note('surface'); }
     if (player.onFoot) tutorial.note('deck');
     updateSalvage(dt);
+    updateStun();
     updateTutorial();
     updateSubtitle(playTime);
     updateSurvival(dt);

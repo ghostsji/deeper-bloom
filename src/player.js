@@ -13,6 +13,8 @@ const SWIM = {
   eye: 1.1,          // closest the camera gets to the seafloor
   float: 0.35,       // how far your eyes sit above the water when treading at the surface
   climb: 1.6,        // swim this close under a raft and you climb onto it
+  stunSink: 7,       // m/s² pulling you down while stunned (a shock from the cracked glass)
+  stunLook: 0.15,    // how much of your mouse movement still turns the view while stunned
 };
 const WALK = {
   accel: 40,
@@ -31,6 +33,7 @@ export function createPlayer(camera, canvas) {
   const vel = new THREE.Vector3();
   const keys = new Set();
   let onFoot = false, grounded = false;
+  let stun = 0, stunMax = 1; // seconds left stunned: no control, and you sink
   let deckAt = () => null; // (x, z) => deck surface height, or null over open water
   // Fallback for when pointer lock isn't available: the free cursor looks around, and
   // resting it near a screen edge keeps turning that way.
@@ -69,7 +72,8 @@ export function createPlayer(camera, canvas) {
   addEventListener('mousemove', (e) => {
     cursor.x = e.clientX / innerWidth; cursor.y = e.clientY / innerHeight; cursor.in = true;
     // Settings → Controls: look sensitivity and invert Y apply to the mouse only (not Q/E).
-    if (document.pointerLockElement === canvas || cursorLook) look(e.movementX * mouse.sens, e.movementY * mouse.sens * (mouse.invertY ? -1 : 1));
+    const k = mouse.sens * (stun > 0 ? SWIM.stunLook : 1);
+    if (document.pointerLockElement === canvas || cursorLook) look(e.movementX * k, e.movementY * k * (mouse.invertY ? -1 : 1));
   });
   document.addEventListener('mouseleave', () => { cursor.in = false; });
   // Clicking the view retries the lock (it works in a normal browser tab, not in embedded ones).
@@ -86,6 +90,7 @@ export function createPlayer(camera, canvas) {
 
   function readInput(flat) {
     wish.set(0, 0, 0);
+    if (stun > 0) return false; // stunned: your limbs won't answer
     const f = flat ? _flatFwd.set(-Math.sin(yaw), 0, -Math.cos(yaw)) : fwd;
     const r = flat ? _flatRight.set(Math.cos(yaw), 0, -Math.sin(yaw)) : right;
     if (keys.has('KeyW') || keys.has('ArrowUp')) wish.add(f);
@@ -107,6 +112,7 @@ export function createPlayer(camera, canvas) {
     vel.multiplyScalar(Math.exp(-SWIM.drag * dt));
     // A faint buoyant bob so standing still never feels frozen.
     vel.y += Math.sin(t * 0.9) * 0.15 * dt;
+    if (stun > 0) vel.y -= SWIM.stunSink * dt; // limp: you sink
     p.addScaledVector(vel, dt);
 
     const floor = floorY(p.x, p.z) + SWIM.eye;
@@ -129,7 +135,7 @@ export function createPlayer(camera, canvas) {
     vel.z += wish.z * WALK.accel * dash * dt;
     const k = Math.exp(-(grounded ? WALK.drag : 1) * dt);
     vel.x *= k; vel.z *= k;
-    if (grounded && keys.has('Space')) { vel.y = WALK.jump; grounded = false; }
+    if (grounded && stun <= 0 && keys.has('Space')) { vel.y = WALK.jump; grounded = false; }
     vel.y -= WALK.gravity * dt;
     p.addScaledVector(vel, dt);
 
@@ -152,12 +158,17 @@ export function createPlayer(camera, canvas) {
     clearKeys() { keys.clear(); },
     get speed() { return vel.length(); },
     get onFoot() { return onFoot; },
+    /** Stuns for this many seconds: no movement, sluggish look, and you sink. */
+    setStun(secs) { stun = Math.max(stun, secs); stunMax = Math.max(stun, 0.01); vel.multiplyScalar(0.3); },
+    get stunned() { return stun > 0; },
+    get stunLeft() { return stun; },
     update(dt, t) {
+      stun = Math.max(0, stun - dt);
       if (cursorLook && cursor.in && document.pointerLockElement !== canvas) {
         const px = (EDGE_TURN * dt) / SWIM.look;
         look(edgePush(cursor.x) * px, edgePush(cursor.y) * px * 0.6);
       }
-      const turn = (keys.has('KeyE') ? 1 : 0) - (keys.has('KeyQ') ? 1 : 0);
+      const turn = stun > 0 ? 0 : (keys.has('KeyE') ? 1 : 0) - (keys.has('KeyQ') ? 1 : 0);
       if (turn) look((turn * SWIM.keyTurn * dt) / SWIM.look, 0);
       euler.set(pitch, yaw, 0);
       camera.quaternion.setFromEuler(euler);
@@ -173,6 +184,12 @@ export function createPlayer(camera, canvas) {
       sway += dt * (1 + vel.length() * 0.4);
       const roll = onFoot ? 0.002 : 0.006 * (0.3 + Math.min(1, vel.length() / 4));
       camera.rotateZ(Math.sin(sway * 1.3) * roll);
+      // Stunned: the view twitches and lolls, easing off as you come round.
+      if (stun > 0) {
+        const s = stun / stunMax;
+        camera.rotateZ(Math.sin(t * 2.3) * 0.12 * s + (Math.random() - 0.5) * 0.03 * s);
+        camera.rotateX((Math.random() - 0.5) * 0.025 * s);
+      }
     },
   };
 }
