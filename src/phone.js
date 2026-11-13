@@ -5,7 +5,8 @@ import { STEPS } from './tutorial.js';
 import { keyName } from './controls.js';
 import { SYSTEMS } from './hud-systems.js';
 import { crackSvg } from './hud-fx.js';
-import { APPS } from './salvage.js';
+import { APPS, CELLS } from './salvage.js';
+import { POWER, PRESSURE } from './suit.js';
 
 // The diver's phone: Deep Bloom's app on a ruggedised handset. Tab brings it up, and the
 // game pauses while it's out. Tabs: build, research, codex, status, goals, skills and a
@@ -45,6 +46,9 @@ const GUIDES = [
   ['Food and cooking', () => `Underwater, <kbd>Left-click</kbd> a silverfin in front of you (glide in slowly, or it bolts) or the kelp you're aiming at. ${k('eat')} eats. Raw food is better cooked: press ${k('use')} at a cook fire. A kelp farm grows kelp for you; press ${k('use')} to collect it.`],
   ['The harpoon and eels', () => `${k('harpoon')} raises the harpoon and <kbd>Left-click</kbd> fires; the spear reels back before the next shot. Each shot wears it down; repair it at a workbench with kelp (${k('use')}). Blighted eels guard some kelp patches. Three hits cure one, and it drops Lumen and eel meat. They can't follow you onto a raft.`],
   ['Missing phone apps', () => 'The flood washed the Codex, Status, Goals and Skills apps out of your phone. Each one\'s module lies on the reef in a salvage pod: a blinking capsule under a thin beam of light that reaches the surface. Pods ping louder as you get close, and once Navigation is restored they show on the compass. Swim into a pod to put its app back. Goals still pay Bloom points while the apps are missing.'],
+  ['Visor battery', () => `Your HUD runs on a battery that drains as you play. At 30% navigation shuts off, then the depth gauge (20%), the Lumen and Data readouts (12%) and your vitals (5%); at 0% Echo's subtitles go too. It recharges fast on a raft deck and slowly while you tread water at the surface, or you can buy ${POWER.lumenCharge}% for ${POWER.lumenCost} Lumen on the Status app. Two power cells lie in salvage pods next to live cables: each makes the battery last longer.`],
+  ['Pressure on the glass', () => `Below ${PRESSURE.safeDepth} m, deep water strains your cracked visor. The glass groans, the GLASS STRAIN bar under your depth fills, and new cracks spread across it. When it's full the visor leaks: water fills it from the bottom and you run out of breath much faster. Go shallower to ease it, surface to drain the water, and fix the Visor seal (finish 2 research projects) to stop it for good.`],
+  ['Live electricity', () => 'Some jellies carry a charge: they\'re paler, and crackle with little arcs. Broken cables from the flooded outpost lie on the sand with sparking ends. You\'ll hear them crackle as you get close. Touch one and it shocks you like the cracked glass: you lose health, you\'re stunned and sink, and your phone reboots. Sinking stunned next to a cable can shock you again. With the Threat sensor restored they show on the compass.'],
   ['Goals and skills', () => 'Every goal (Lumen gathered, scans, fish, distance swum...) has endless tiers. Each tier pays Bloom points, which you spend on the Skills tab. Some skills need another one learned first.'],
   ['Blacking out', () => 'If your health hits zero you black out and wake on your nearest raft. Your bag drops where you fell: swim back to the gold ring to pick it up. Blacking out again before you do loses it.'],
   ['Saving', () => 'The game saves as you play. Save game (on the pause menu or the main menu) also copies it to one of three slots, and Load game brings one back.'],
@@ -163,7 +167,14 @@ export function createPhone(el, g) {
         <span class="tick">${on ? '✓' : '!'}</span><div><b>${x.name}</b>
         <p>${on ? 'Online' : `${x.how}${pr.need > 1 ? ` <small>${pr.have} / ${pr.need}</small>` : ''}`}</p></div></li>`;
     }).join('');
-    return `<div class="collection systems" data-tip="The flood damaged your visor. Each system comes back online when you reach its milestone.">
+    const su = g.suit, pw = Math.round(su.power);
+    const battery = `<div class="pcard" data-tip="${esc(`Runs your HUD. As it drains, navigation, then the depth gauge, readouts and vitals shut off. Recharges on a raft deck (fast) or at the surface (slowly). Power cells from salvage pods make it last longer.`)}">
+        <div class="row"><b>Visor battery</b><span class="small ${pw <= 30 ? 'gold' : 'cyan'}">${pw}%</span></div>
+        <div class="bar" style="margin-top:8px"><div class="fill ${pw <= 30 ? 'gold-bg' : ''}" style="width:${pw}%"></div></div>
+        <p>Power cells fitted: ${su.cells} of ${CELLS.length}. Recharges on a raft deck, or slowly at the surface.</p>
+        <div class="row" style="margin-top:10px"><button type="button" class="btn small" data-charge ${pw >= 100 || g.lumen() < POWER.lumenCost ? 'disabled' : ''}>Charge +${POWER.lumenCharge}% · ${POWER.lumenCost} Lumen</button></div>
+      </div>`;
+    return `${battery}<div class="collection systems" data-tip="The flood damaged your visor. Each system comes back online when you reach its milestone.">
         <div class="row"><span class="label">Visor systems</span><span class="small ${pct === 100 ? 'cyan' : 'gold'}">${pct}% restored</span></div>
         <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
         <ol class="tutlist">${sysRows}</ol>
@@ -279,6 +290,7 @@ export function createPhone(el, g) {
     if (b.dataset.eat) { g.onEat(b.dataset.eat); render(); }
     if (b.dataset.buy) { g.onBuy(b.dataset.buy); render(); }
     if (b.dataset.tut) { g.onTutorial(b.dataset.tut); render(); }
+    if ('charge' in b.dataset) { g.onCharge(); render(); }
   });
 
   return {

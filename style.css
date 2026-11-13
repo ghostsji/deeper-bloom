@@ -441,3 +441,43 @@ body.stunned #hud::after { content: ''; position: absolute; inset: 0; pointer-ev
 /* The phone dying in your hand as it drops away. */
 .phone.dead .phone-screen::after { content: ''; position: absolute; inset: 0; z-index: 5; background:
     repeating-linear-gradient(0deg, rgba(255, 255, 255, .12) 0 2px, transparent 2px 4px), #020608; animation: vfuzz .08s steps(2) infinite; }
+
+/* ---- Visor battery ---- */
+.power { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; margin-bottom: 4px; padding-bottom: 7px; border-bottom: 1px dashed var(--hud-line); font: 11px var(--mono); letter-spacing: .16em; color: var(--cyan); }
+.power i { height: 4px; background: linear-gradient(90deg, var(--cyan) calc(var(--v) * 100%), rgba(92, 242, 214, .15) 0); }
+.power b { font-weight: 400; color: var(--text); }
+.power em { font-style: normal; color: var(--gold); animation: flick 1s infinite steps(1); }
+.power.low { color: var(--gold); }
+.power.low i { background: linear-gradient(90deg, var(--gold) calc(var(--v) * 100%), rgba(255, 196, 107, .15) 0); }
+.power.crit { color: #ff8f8f; animation: flick .8s infinite steps(1); }
+.power.crit i { background: linear-gradient(90deg, #ff8f8f calc(var(--v) * 100%), rgba(255, 143, 143, .15) 0); }
+/* Systems cut to save power fade out (the stats panel keeps its power row). */
+.nopower { opacity: .06 !important; filter: grayscale(1); animation: none !important; }
+.stats.nopower { opacity: 1 !important; filter: none; }
+.stats.nopower .stat { opacity: .08; }
+
+/* ---- Pressure ---- */
+.strain { margin-top: 6px; }
+.strain small { display: block; font: 10px var(--mono); letter-spacing: .2em; text-transform: uppercase; color: #ffb3a8; }
+.strain i { display: block; width: 120px; height: 4px; margin: 4px 0 0 auto; background: linear-gradient(90deg, #ffc46b, #ff5c6c calc(var(--s) * 100%), rgba(255, 92, 108, .15) 0); }
+.strain.max small { animation: flick .6s infinite steps(1); color: #ff5c6c; }
+.v-stress { position: absolute; inset: 0; }
+.v-stress-layer { position: absolute; inset: 0; opacity: 0; transition: opacity .3s; }
+.v-stress-layer svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.v-stress-layer .crack-edge path, .v-stress-layer .crack-shadow path { stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset 1.4s cubic-bezier(.2, .7, .3, 1); }
+.v-stress-layer .crack-shards, .v-stress-layer .crack-glints { opacity: 0; transition: opacity .4s .9s; }
+.v-stress-layer.on { opacity: 1; }
+.v-stress-layer.on .crack-edge path, .v-stress-layer.on .crack-shadow path { stroke-dashoffset: 0; }
+.v-stress-layer.on .crack-shards, .v-stress-layer.on .crack-glints { opacity: 1; }
+.v-stress-layer:not(.on) .crack-hit * { pointer-events: none; }
+/* Water leaking into the visor, filling from the bottom. */
+.v-leak { position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--leak, 0) * 100%); transition: height .4s linear;
+  background: linear-gradient(180deg, rgba(120, 210, 225, .28), rgba(20, 80, 110, .55)); backdrop-filter: blur(2px) saturate(.7); }
+.v-leak svg { position: absolute; left: -5%; bottom: 100%; width: 110%; height: 22px; fill: rgba(120, 210, 225, .28); animation: slosh 2.6s ease-in-out infinite alternate; }
+.visor:not(.leaking) .v-leak { display: none; }
+.v-leak .bub { position: absolute; bottom: 0; width: 7px; height: 7px; border-radius: 50%; border: 1px solid rgba(220, 255, 255, .6); animation: bub 2.2s ease-in infinite; animation-delay: calc(var(--d) * -1); }
+@keyframes bub { from { transform: translateY(0); opacity: .9; } to { transform: translateY(-120px); opacity: 0; } }
+
+/* ---- Compass: power cells and live hazards ---- */
+.compass .mark.cell { width: 8px; height: 8px; background: var(--gold); box-shadow: 0 0 8px var(--gold); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+.compass .mark.hazard { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 9px solid #fff27a; filter: drop-shadow(0 0 4px #ffe066); }

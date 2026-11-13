@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { floorY, SURFACE_Y } from './world.js';
+import { CABLE_SITES, cableEnd } from './hazards.js';
 
 // Phone apps the flood washed out of your phone. Each one's module lies somewhere on the reef
 // in a salvage pod: a blinking capsule under a faint beam of light that reaches up to the
@@ -11,6 +12,12 @@ export const APPS = [
   { id: 'skills', name: 'Skills', where: 'Deep in a kelp patch. Eels may be guarding it.' },
 ];
 export const APP_IDS = APPS.map((a) => a.id);
+// Spare power cells for the visor battery, lying beside two of the live cables.
+export const CELLS = [
+  { id: 'cell1', name: 'Power cell', kind: 'cell', site: 0 },
+  { id: 'cell2', name: 'Power cell', kind: 'cell', site: 1 },
+];
+const ITEMS = [...APPS, ...CELLS];
 const PICKUP = 2.4;
 
 // Where each pod lies. Skills goes in a far kelp patch (where eels nest) to make it a trip.
@@ -18,18 +25,24 @@ function spots(kelpPatches) {
   const at = (x, z) => new THREE.Vector3(x, floorY(x, z) + 0.9, z);
   const far = [...kelpPatches].filter((p) => Math.hypot(p.x, p.z) < 66)
     .sort((a, b) => Math.hypot(b.x, b.z - 24) - Math.hypot(a.x, a.z - 24))[0];
-  return { codex: at(7, 11), status: at(-26, -2), goals: at(30, -24), skills: far ? at(far.x + 1.5, far.z) : at(-34, -40) };
+  const spot = { codex: at(7, 11), status: at(-26, -2), goals: at(30, -24), skills: far ? at(far.x + 1.5, far.z) : at(-34, -40) };
+  // Cells: 2.6 m to the side of a sparking cable end, so you can reach one without touching it.
+  for (const c of CELLS) {
+    const site = CABLE_SITES[c.site], end = cableEnd(site), side = site.ang + Math.PI / 2;
+    spot[c.id] = at(end.x + Math.cos(side) * 2.6, end.z + Math.sin(side) * 2.6);
+  }
+  return spot;
 }
 
 export function createSalvage(scene, kelpPatches) {
   const where = spots(kelpPatches);
   const shellMat = new THREE.MeshStandardMaterial({ color: 0x2a3b42, metalness: 0.6, roughness: 0.35 });
-  const pods = APPS.map((app) => {
+  const pods = ITEMS.map((app) => {
     const g = new THREE.Group();
     g.position.copy(where[app.id]);
     const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.55, 6, 12), shellMat);
     body.rotation.z = Math.PI / 2 - 0.35;
-    const band = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.045, 8, 24), new THREE.MeshBasicMaterial({ color: 0x5cf2d6 }));
+    const band = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.045, 8, 24), new THREE.MeshBasicMaterial({ color: app.kind === 'cell' ? 0xffc46b : 0x5cf2d6 }));
     band.rotation.y = Math.PI / 2; band.rotation.x = 0.35;
     const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }));
     lamp.position.y = 0.36;
@@ -57,7 +70,7 @@ export function createSalvage(scene, kelpPatches) {
 
   return {
     /** Pods still out there: [{ id, pos }]. */
-    remaining: () => pods.filter((p) => !p.found).map((p) => ({ id: p.app.id, pos: p.g.position })),
+    remaining: () => pods.filter((p) => !p.found).map((p) => ({ id: p.app.id, kind: p.app.kind || 'app', pos: p.g.position })),
     found: (id) => pods.find((p) => p.app.id === id)?.found ?? false,
     /** Marks apps found (from a save) without a pickup. */
     load(ids) { for (const p of pods) { p.found = (ids || []).includes(p.app.id); p.g.visible = !p.found; } },

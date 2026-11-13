@@ -19,10 +19,12 @@ import { createTutorial, STEPS } from './tutorial.js';
 import { createSystems } from './hud-systems.js';
 import { createHudFx } from './hud-fx.js';
 import { createSalvage, APPS } from './salvage.js';
-import { onShock } from './shock.js';
+import { onShock, shockAt } from './shock.js';
+import { createSuit, POWER } from './suit.js';
+import { createHazards } from './hazards.js';
 import { setTooltips } from './tooltips.js';
 import { keyName } from './controls.js';
-import { initAudio, updateAudio, setMusic, uiSound, pop, chime, thunk, salvagePing, rebootSound, setPaused, gasp, heartbeat, warn, munch, sizzle, grab, harpoonFire, thud, hiss, bite, release, click } from './audio.js';
+import { initAudio, updateAudio, setMusic, uiSound, pop, chime, thunk, salvagePing, rebootSound, creakSound, glassCrackSound, bubbleSound, lowPowerSound, chargeSound, sparkSound, setPaused, gasp, heartbeat, warn, munch, sizzle, grab, harpoonFire, thud, hiss, bite, release, click } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 const BLOOM_FULL = 60;   // Lumen gathered for the reef to glow at full strength
@@ -72,6 +74,9 @@ const systems = createSystems({
 const hudFx = createHudFx(document.body, systems);
 // The phone apps the flood washed away, in salvage pods out on the reef.
 const salvage = createSalvage(scene, world.kelpPatches);
+// The suit (visor battery, pressure on the glass) and the live electricity on the reef.
+const suit = createSuit();
+const hazards = createHazards(scene, world.jellies);
 const survival = createSurvival({
   onBlackout: blackout,
   onChange: () => { renderBag(); save(); },
@@ -201,7 +206,7 @@ function gather(n, bright) {
 function save() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      lumen, builds: builder.serialize(), research: research.serialize(), survival: survival.serialize(), progress: progress.serialize(), tutorial: tutorial.serialize(), systems: systems.serialize(), apps: salvage.serialize(),
+      lumen, builds: builder.serialize(), research: research.serialize(), survival: survival.serialize(), progress: progress.serialize(), tutorial: tutorial.serialize(), systems: systems.serialize(), apps: salvage.serialize(), suit: suit.serialize(),
       satchel: satchel && { pos: satchel.pos.toArray(), items: satchel.items },
     }));
   } catch { /* not saved */ }
@@ -215,6 +220,7 @@ function load() {
     tutorial.load(data.tutorial);
     systems.load(data.systems);
     salvage.load(data.apps);
+    suit.load(data.suit);
     builder.load(data.builds);
     setLumen(data.lumen || 0);
     renderHudData();
@@ -450,6 +456,16 @@ const phone = createPhone($('phone'), {
   },
   onEat: (id) => eat(id),
   onBuy: (id) => buySkill(id),
+  suit,
+  onCharge: () => {
+    if (suit.power >= 100) { toast('Your visor battery is already full.'); return; }
+    if (lumen < POWER.lumenCost) { toast(`Charging takes ${POWER.lumenCost} Lumen.`); return; }
+    setLumen(lumen - POWER.lumenCost);
+    progress.track('spent', POWER.lumenCost);
+    suit.charge(POWER.lumenCharge);
+    chargeSound();
+    save();
+  },
   tutorial,
   systems,
   hasApp: (id) => salvage.found(id),
@@ -718,7 +734,8 @@ function updateVisor(dt) {
   const deck = builder.deckNear(p);
   if (deck) points.push(point('raft', deck));
   if (satchel) points.push(point('satchel', satchel.pos));
-  if (systems.online('nav')) for (const pod of salvage.remaining()) points.push(point('pod', pod.pos));
+  if (systems.online('nav')) for (const pod of salvage.remaining()) points.push(point(pod.kind === 'cell' ? 'cell' : 'pod', pod.pos));
+  if (systems.online('sensor')) for (const h of hazards.sources) { const at = h.pos(); if (at.distanceTo(p) < 45) points.push({ ...point('hazard', at), dist: null }); }
   if (systems.online('sensor')) for (const e of combat.eelPositions()) if (e.distanceTo(p) < 45) points.push({ ...point('eel', e), dist: null });
   hudFx.update(dt, t, { heading: Math.atan2(_dir.x, -_dir.z), points, playing: state === 'playing' });
 }
@@ -729,9 +746,11 @@ function updateVisor(dt) {
 const STUN_SECS = 2.5, PHONE_DOWN_SECS = 6;
 let shocked = 0, phoneDownUntil = 0;
 const phoneDown = () => Math.max(0, phoneDownUntil - playTime);
-onShock(({ where }) => {
+let lastWorldShock = -9;
+// where: 'visor' | 'phone' (touched the glass) | 'jelly' | 'cable' (swam into live electricity)
+function takeShock(where, dmg = 3) {
   if (state !== 'playing' && state !== 'phone') return;
-  survival.damage(3);
+  survival.damage(dmg);
   hurtFlash();
   progress.track('shocks');
   phoneDownUntil = playTime + PHONE_DOWN_SECS;
@@ -745,8 +764,57 @@ onShock(({ where }) => {
   setLens(false);
   scanHeld = false;
   player.setStun(STUN_SECS);
-  if (shocked++ < 2) toast(where === 'phone' ? "Zap! The phone's cracked screen is live. Keep your fingers off the cracks." : "Zap! The cracked visor is live. Don't touch the cracks.", { color: '#9fe8ff' });
-});
+  const MSG = {
+    phone: "Zap! The phone's cracked screen is live. Keep your fingers off the cracks.",
+    visor: "Zap! The cracked visor is live. Don't touch the cracks.",
+    jelly: 'Zap! That jelly is carrying a charge. Give the pale ones room.',
+    cable: 'Zap! That cable is still live. Keep clear of the sparking end.',
+  };
+  if (where === 'jelly' || where === 'cable' || shocked++ < 2) toast(MSG[where], { color: '#9fe8ff' });
+}
+onShock(({ where }) => takeShock(where));
+
+// ---- The suit: visor battery, pressure, live electricity --------------------------
+let creakClock = 3, bubbleClock = 0, sparkClock = 0, wasCharging = false;
+function updateSuit(dt) {
+  const depth = Math.max(0, SURFACE_Y - camera.position.y), surfaced = atSurface(), sealed = systems.online('visor');
+  const ev = suit.update(dt, { depth, surfaced, onDeck: player.onFoot, sealed });
+  const charging = player.onFoot || surfaced;
+  if (charging && !wasCharging && suit.power < 99) chargeSound();
+  wasCharging = charging;
+  if (ev.warn) {
+    lowPowerSound(ev.warn <= 5);
+    toast(ev.warn === 30 ? 'Visor battery 30%: navigation shut off to save power. Recharge on a raft deck, at the surface, or with Lumen (phone Status).'
+      : ev.warn === 15 ? 'Visor battery 15%: depth gauge off. Get to a raft.' : 'Visor battery 5%: your HUD is going dark.', { color: '#ffc46b' });
+  }
+  if (ev.layer) {
+    glassCrackSound();
+    toast(ev.layer < 3 ? "The glass is cracking under the pressure! Go shallower (above 20 m) or fix the Visor seal." : 'Your visor is leaking! Get shallower, or surface to drain it.', { color: '#ff8f8f' });
+  }
+  // The glass groans more often the harder it's strained.
+  if (!sealed && suit.stress > 0.15 && (creakClock -= dt) <= 0) {
+    creakSound(suit.stress);
+    creakClock = 1.5 + Math.random() * 5 * (1.2 - suit.stress);
+  }
+  // Water in the visor: bubbles, and it steals your breath.
+  if (suit.leak > 0.01) {
+    if (camera.position.y < SURFACE_Y) survival.stats.breath = Math.max(0, survival.stats.breath - (100 / 45) * suit.leakBreathFactor() * dt);
+    if ((bubbleClock -= dt) <= 0) { bubbleSound(); bubbleClock = 0.6 + Math.random() * 1.2; }
+  }
+  hudFx.setSuit({ power: suit.power, charging: charging && suit.power < 100, unpowered: suit.unpowered, crackLayers: sealed ? 0 : suit.crackLayers, stress: suit.stress, leak: suit.leak, sealed });
+
+  // Live electricity: crackle as you get close, shock if you touch.
+  const hz = hazards.update(dt, t, camera.position);
+  if (hz.nearest < 8 && (sparkClock -= dt) <= 0) {
+    sparkSound(1 - hz.nearest / 8);
+    sparkClock = 0.15 + Math.random() * 0.5 * (hz.nearest / 8);
+  }
+  if (hz.hit && playTime - lastWorldShock > 2) {
+    lastWorldShock = playTime;
+    shockAt(innerWidth / 2, innerHeight / 2);
+    takeShock(hz.hit.kind, 4);
+  }
+}
 // The STUNNED / PHONE REBOOTING readout and the stun overlay.
 function updateStun() {
   const stunned = state === 'playing' && player.stunned, down = phoneDown();
@@ -765,7 +833,11 @@ function updateSalvage(dt) {
   const { got, nearest } = salvage.update(t, camera.position);
   if (got) {
     rebootSound();
-    toast(`Recovered the ${got.name} app (${APPS.filter((a) => salvage.found(a.id)).length} of ${APPS.length})`, { color: '#5CF2D6' });
+    if (got.kind === 'cell') {
+      suit.addCell();
+      suit.charge(100);
+      toast(`Power cell fitted (${suit.cells} of 2): your visor battery lasts longer, and it's fully charged.`, { color: '#ffc46b' });
+    } else toast(`Recovered the ${got.name} app (${APPS.filter((a) => salvage.found(a.id)).length} of ${APPS.length})`, { color: '#5CF2D6' });
     tutorial.note('salvage');
     save();
   }
@@ -800,6 +872,7 @@ function frame() {
     if (player.onFoot) tutorial.note('deck');
     updateSalvage(dt);
     updateStun();
+    updateSuit(dt);
     updateTutorial();
     updateSubtitle(playTime);
     updateSurvival(dt);
@@ -843,7 +916,7 @@ function frame() {
 
 
 // ?debug exposes the internals in the console.
-if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, systems, hudFx, salvage, addLumen: (n) => setLumen(lumen + n) } });
+if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, systems, hudFx, salvage, suit, hazards, addLumen: (n) => setLumen(lumen + n) } });
 
 renderBuildBar();
 load();

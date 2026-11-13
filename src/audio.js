@@ -488,3 +488,57 @@ export function zapSound() {
   o.start(t); lfo.start(t); o.stop(t + 0.4); lfo.stop(t + 0.4);
   beep(t, 2400, 180, 0.22, { type: 'sine', gain: 0.05 });
 }
+
+// ---- Pressure, power and live electricity ---------------------------------------------
+// The visor glass groaning under pressure: a low, slowly bending tone with a gritty edge.
+export function creakSound(strength = 0.5) {
+  if (!ctx) return;
+  const t = ctx.currentTime, dur = 0.6 + Math.random() * 0.8, f = 38 + Math.random() * 30;
+  const o = ctx.createOscillator(), lp = ctx.createBiquadFilter(), g = ctx.createGain();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(f, t);
+  o.frequency.linearRampToValueAtTime(f * (0.7 + Math.random() * 0.6), t + dur);
+  lp.type = 'lowpass'; lp.frequency.value = 260 + strength * 300; lp.Q.value = 6;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.05 + strength * 0.07, t + dur * 0.3);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(lp); lp.connect(g); g.connect(visor);
+  o.start(t); o.stop(t + dur + 0.05);
+  crackle(t + dur * 0.2, dur * 0.6, { freq: 900, q: 3, gain: 0.02 + strength * 0.03, chop: 0.03 });
+}
+// Glass giving way: a hard snap, then a spray of tiny high tinkles.
+export function glassCrackSound() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  crackle(t, 0.05, { freq: 3500, q: 0.8, gain: 0.3, chop: 1 });
+  crackle(t + 0.04, 0.25, { freq: 6000, q: 1.5, gain: 0.08, chop: 0.01 });
+  for (let i = 0; i < 6; i++) beep(t + 0.05 + Math.random() * 0.3, 3000 + Math.random() * 3000, 2500 + Math.random() * 2000, 0.08, { type: 'sine', gain: 0.015 });
+  creakSound(1);
+}
+// Water getting in: a glug of bubbles.
+export function bubbleSound() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  for (let i = 0; i < 3; i++) {
+    const at = t + i * (0.06 + Math.random() * 0.08), f = 300 + Math.random() * 400;
+    beep(at, f, f * 2.2, 0.07, { type: 'sine', gain: 0.03 });
+  }
+}
+// Low battery: two falling beeps (three when it's critical).
+export function lowPowerSound(critical = false) {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  for (let i = 0; i < (critical ? 3 : 2); i++) beep(t + i * 0.18, 880 - i * 160, 700 - i * 160, 0.13, { type: 'square', gain: 0.03 });
+}
+// Charging: a quick rising chirp.
+export function chargeSound() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  beep(t, 400, 1200, 0.18, { type: 'triangle', gain: 0.04 });
+}
+// A live wire or jelly nearby: a snap of electrical crackle, louder the closer you are (0..1).
+export function sparkSound(closeness) {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  crackle(t, 0.05 + Math.random() * 0.12, { freq: 2500 + Math.random() * 3000, q: 0.7, gain: 0.02 + closeness * 0.12, chop: 0.008 });
+}

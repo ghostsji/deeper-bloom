@@ -123,7 +123,7 @@ try {
   // Lost phone apps: four start missing; swimming into a salvage pod brings one back.
   const apps = await run(`
     const missing0 = [...document.querySelectorAll('#phone [data-tab].missing')].map((b) => b.dataset.tab);
-    const pods0 = db.salvage.remaining().length;
+    const pods0 = db.salvage.remaining().filter((p) => p.kind === 'app').length;
     const pod = db.salvage.remaining().find((p) => p.id === 'codex');
     const back = db.camera.position.clone();
     db.camera.position.copy(pod.pos);
@@ -228,6 +228,40 @@ try {
     };`);
   check('the visor starts damaged (cracks, no compass, flickering vitals)', hud.cracks && hud.navOff && hud.vitalsDmg);
   check('progress restores visor systems', hud.ledger && hud.comms, hud.pct);
+
+  // The suit: a low battery cuts systems, deep water cracks and floods the visor, and live
+  // cables and jellies shock you.
+  const suitRes = await run(`
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    db.suit.load({ power: 25, cells: 0, stress: 0, leak: 0 });
+    await sleep(300);
+    const navOff = document.getElementById('compass').classList.contains('nopower'), depthOn = !document.querySelector('.depthbox').classList.contains('nopower');
+    const pwr = document.getElementById('power').textContent;
+    db.suit.load({ power: 80, stress: 0.999, leak: 0.3 });
+    db.camera.position.set(4, 2.5, 30); // about 23 m down, open sand
+    await sleep(700);
+    const layers = document.querySelectorAll('.v-stress-layer.on').length, leaking = document.getElementById('visor').classList.contains('leaking');
+    const strain = !document.getElementById('strain').hidden;
+    db.suit.load({ power: 80, stress: 0, leak: 0 });
+    const cable = db.hazards.sources.find((h) => h.kind === 'cable');
+    const h0 = db.survival.stats.health;
+    db.camera.position.copy(cable.pos()).y += 0.5;
+    await sleep(300);
+    const cableHit = h0 - db.survival.stats.health, stunned = db.player.stunned;
+    db.camera.position.set(0, 12, 24); // away from the cable (stunned beside it, it would shock again)
+    await sleep(2600);
+    const jelly = db.hazards.sources.find((h) => h.kind === 'jelly');
+    const h1 = db.survival.stats.health;
+    db.camera.position.copy(jelly.pos());
+    await sleep(200);
+    const jellyHit = h1 - db.survival.stats.health;
+    db.camera.position.set(0, 12, 24);
+    await sleep(3200); // let the stun and the sinking wear off
+    return { navOff, depthOn, pwr, layers, leaking, strain, cableHit, stunned, jellyHit };`);
+  check('a low visor battery shuts navigation off first', suitRes.navOff && suitRes.depthOn && /PWR/.test(suitRes.pwr), suitRes.pwr);
+  check('deep water spreads cracks and floods the visor', suitRes.layers === 3 && suitRes.leaking && suitRes.strain, `${suitRes.layers} crack layers`);
+  check('a live cable shocks and stuns you', suitRes.cableHit > 0 && suitRes.stunned, `-${suitRes.cableHit.toFixed(1)} health`);
+  check('an electric jelly shocks you', suitRes.jellyHit > 0, `-${suitRes.jellyHit.toFixed(1)} health`);
 
   const save = await run(`
     const raw = localStorage.getItem('deeperbloom-save-v1');

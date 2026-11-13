@@ -13,7 +13,7 @@ const scramble = (s, p) => s.replace(/\S/g, (ch) => (Math.random() < p ? GLYPHS[
 // jagged rings of stress fractures, and long branching cracks. Every crack is drawn as a dark
 // shadow plus a bright edge (so the glass has depth), with glints where light catches it. The
 // crack lines are repeated as wide invisible "hit" strokes, so touching them can shock you.
-function cracks(w, h, seed, impacts = [[0.86, 0.16, 7], [0.1, 0.78, 5], [0.62, 0.9, 3]]) {
+function cracks(w, h, seed, impacts = [[0.86, 0.16, 7], [0.1, 0.78, 5], [0.62, 0.9, 3]], grow = false) {
   let r = seed;
   const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647);
   const f = (v) => v.toFixed(1);
@@ -53,7 +53,7 @@ function cracks(w, h, seed, impacts = [[0.86, 0.16, 7], [0.1, 0.78, 5], [0.62, 0
     for (let i = 0; i < n; i++) branch(cx, cy, (i / n) * Math.PI * 2 + rnd(), (0.18 + rnd() * 0.22) * w, 0);
   }
   const all = [...lines, ...rings];
-  const draw = (stroke, dx, extra = 0) => all.map(([d, sw]) => `<path d="${d}" stroke="${stroke}" stroke-width="${f(sw + extra)}"${dx ? ` transform="translate(${dx} ${dx})"` : ''}/>`).join('');
+  const draw = (stroke, dx, extra = 0) => all.map(([d, sw]) => `<path d="${d}" stroke="${stroke}" stroke-width="${f(sw + extra)}"${grow ? ' pathLength="1"' : ''}${dx ? ` transform="translate(${dx} ${dx})"` : ''}/>`).join('');
   return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" fill="none" stroke-linecap="round" stroke-linejoin="round">
     <g class="crack-shadow">${draw('rgba(0,10,14,.45)', 1.2, 0.8)}</g>
     <g class="crack-edge">${draw('rgba(214,246,244,.6)', 0)}</g>
@@ -75,9 +75,16 @@ export function createHudFx(root, systems) {
       <div class="v-band"></div><div class="v-deadpx"></div>
       <div class="v-water"><svg viewBox="0 0 1600 60" preserveAspectRatio="none"><path d="M0 30 Q100 10 200 30 T400 30 T600 30 T800 30 T1000 30 T1200 30 T1400 30 T1600 30 V60 H0Z"/></svg>
         ${Array.from({ length: 7 }, (_, i) => `<i class="drop" style="left:${8 + i * 13 + (i % 3) * 3}%;--d:${(i * 1.7) % 6}s;--t:${4 + (i % 4)}s"></i>`).join('')}</div>
-      ${cracks(1600, 900, 7)}</div><div class="v-scan"></div><div class="v-static"></div>
+      ${cracks(1600, 900, 7)}</div>
+    <div class="v-stress">${[[0.32, 0.3, 4], [0.72, 0.55, 4], [0.45, 0.72, 5]].map((imp, i) => `<div class="v-stress-layer" data-l="${i + 1}">${cracks(1600, 900, 31 + i * 7, [imp], true)}</div>`).join('')}</div>
+    <div class="v-leak"><svg viewBox="0 0 1600 40" preserveAspectRatio="none"><path d="M0 20 Q80 6 160 20 T320 20 T480 20 T640 20 T800 20 T960 20 T1120 20 T1280 20 T1440 20 T1600 20 V40 H0Z"/></svg>
+      ${Array.from({ length: 9 }, (_, i) => `<i class="bub" style="left:${6 + i * 11}%;--d:${(i * 0.7) % 3}s"></i>`).join('')}</div>
+    <div class="v-scan"></div><div class="v-static"></div>
     <i class="v-corner tl"></i><i class="v-corner tr"></i><i class="v-corner bl"></i><i class="v-corner br"></i><div class="v-flash"></div>`;
   const integrityEl = $('#integrity');
+  const powerEl = $('#power'), strainEl = $('#strain'), cmpOff = () => compass.querySelector('.cmp-off');
+  let suit = null; // { power, charging, unpowered(id), crackLayers, stress, leak, sealed }
+  const powered = (id) => !suit || !suit.unpowered(id);
 
   // ---- Compass ----
   const compass = $('#compass');
@@ -144,7 +151,8 @@ export function createHudFx(root, systems) {
 
   function setParts() {
     for (const s of SYSTEMS) for (const q of PARTS[s.id]) root.querySelectorAll(q).forEach((el) => el.classList.toggle('dmg', !systems.online(s.id)));
-    compass.classList.toggle('offline', !systems.online('nav'));
+    compass.classList.toggle('offline', !systems.online('nav') || !powered('nav'));
+    if (cmpOff()) cmpOff().textContent = !systems.online('nav') ? 'NAV OFFLINE · build a research station to restore' : 'NAV · NO POWER · recharge your visor';
     visor.classList.toggle('sealed', systems.online('visor')); // fixed glass can't shock you
     visor.style.setProperty('--crack', systems.online('visor') ? 0 : Math.max(0.25, 0.75 - systems.integrity * 0.5));
     const pct = Math.round(systems.integrity * 100);
@@ -168,6 +176,24 @@ export function createHudFx(root, systems) {
   return {
     text,
     restore,
+    /** The suit's state each frame: battery, systems cut for power, pressure cracks, the leak. */
+    setSuit(st) {
+      const was = suit;
+      suit = st;
+      const pct = Math.round(st.power);
+      const pHtml = `<span>PWR${st.charging ? ' <em>⚡</em>' : ''}</span><i style="--v:${st.power / 100}"></i><b>${pct}%</b>`;
+      if (powerEl.innerHTML !== pHtml) powerEl.innerHTML = pHtml;
+      powerEl.classList.toggle('low', pct <= 30);
+      powerEl.classList.toggle('crit', pct <= 10);
+      for (const s2 of SYSTEMS) for (const q of PARTS[s2.id]) root.querySelectorAll(q).forEach((el) => el.classList.toggle('nopower', !powered(s2.id)));
+      if (!was || was.unpowered('nav') !== st.unpowered('nav')) setParts();
+      root.querySelectorAll('.v-stress-layer').forEach((el) => el.classList.toggle('on', st.crackLayers >= Number(el.dataset.l)));
+      visor.style.setProperty('--leak', st.leak.toFixed(3));
+      visor.classList.toggle('leaking', st.leak > 0.01);
+      strainEl.hidden = st.sealed || st.stress <= 0.01;
+      strainEl.style.setProperty('--s', st.stress.toFixed(3));
+      strainEl.classList.toggle('max', st.stress >= 1);
+    },
     refresh() { setParts(); for (const el of texts.keys()) paint(el); },
     // info: { heading, points: [{ kind, bearing, dist }], playing }
     update(dt, t, info) {
@@ -204,7 +230,7 @@ export function createHudFx(root, systems) {
         humClock = 0.25;
         setVisorHum({ damage, cracked: !systems.online('visor'), on: info.playing });
       }
-      if (systems.online('nav')) renderCompass(info.heading, info.points);
+      if (systems.online('nav') && powered('nav')) renderCompass(info.heading, info.points);
     },
   };
 }

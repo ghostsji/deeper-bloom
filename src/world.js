@@ -71,6 +71,7 @@ export function buildWorld(scene) {
 
   return {
     echo,
+    jellies: jellies.list,
     scannables,
     kelpPatches,
     kelpMesh: kelp.mesh,
@@ -420,6 +421,7 @@ function addJellies(scene) {
     jellies.push(j);
   }
   return {
+    list: jellies,
     update(t) {
       for (const j of jellies) {
         const u = j.userData, pulse = Math.sin(t * 1.4 + u.phase);
