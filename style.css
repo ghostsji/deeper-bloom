@@ -481,3 +481,40 @@ body.stunned #hud::after { content: ''; position: absolute; inset: 0; pointer-ev
 /* ---- Compass: power cells and live hazards ---- */
 .compass .mark.cell { width: 8px; height: 8px; background: var(--gold); box-shadow: 0 0 8px var(--gold); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
 .compass .mark.hazard { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 9px solid #fff27a; filter: drop-shadow(0 0 4px #ffe066); }
+
+/* ---- Fog, heat and running out of air ---- */
+.v-fog { position: absolute; inset: 0; opacity: var(--fog, 0); background:
+    radial-gradient(ellipse 70% 62% at 50% 50%, transparent 30%, rgba(205, 232, 232, .55) 78%, rgba(225, 242, 242, .8) 100%);
+  -webkit-backdrop-filter: blur(calc(var(--fog, 0) * 3px)); backdrop-filter: blur(calc(var(--fog, 0) * 3px)); transition: opacity .4s; }
+.v-glare { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, rgba(255, 250, 235, .85), rgba(255, 210, 160, .6) 60%, rgba(255, 160, 100, .5)); transition: opacity .25s; }
+.visor.glare .v-glare { opacity: 1; animation: glare 1.6s ease-in-out infinite alternate; }
+@keyframes glare { from { opacity: .95; } to { opacity: .55; } }
+.heat { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; margin-bottom: 4px; padding-bottom: 7px; border-bottom: 1px dashed var(--hud-line); font: 11px var(--mono); letter-spacing: .16em; color: var(--sub); }
+.heat i { height: 4px; background: linear-gradient(90deg, #8fd0ff, #ffc46b calc(var(--v) * 70%), #ff5c6c calc(var(--v) * 100%), rgba(143, 208, 255, .12) 0); }
+.heat b { font-weight: 400; color: var(--text); }
+.heat.warm { color: var(--gold); }
+.heat.hot { color: #ff5c6c; animation: flick .5s infinite steps(1); }
+.v-tunnel { position: absolute; inset: 0; opacity: calc(var(--air, 0) * 1.1); background: radial-gradient(ellipse at center, transparent calc(55% - var(--air, 0) * 35%), rgba(0, 0, 0, .65) calc(80% - var(--air, 0) * 30%), #000 100%); }
+.visor.airfail .v-cracks { animation: airpulse 1s ease-in-out infinite; }
+@keyframes airpulse { 50% { filter: drop-shadow(0 0 6px #ff3050) sepia(1) saturate(6) hue-rotate(-40deg); } }
+.airdrop { opacity: 0 !important; }
+.v-phantom { position: absolute; opacity: 0; pointer-events: none; }
+.v-phantom.on { animation: phantom 1.3s ease-in-out forwards; }
+@keyframes phantom { 0% { opacity: 0; } 30% { opacity: .85; } 60% { opacity: .2; } 70% { opacity: .7; } 100% { opacity: 0; } }
+.v-phantom.eel { width: 220px; height: 40px; border-radius: 50%; background: radial-gradient(ellipse, rgba(10, 0, 8, .9), transparent 70%); filter: blur(2px); transform: rotate(-12deg); }
+.v-phantom.marker { width: 14px; height: 14px; background: #ff5c6c; box-shadow: 0 0 16px #ff3050; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.v-phantom.restored, .v-phantom.echo { font: 600 14px var(--mono); letter-spacing: .14em; color: #9fe8ff; text-shadow: 0 0 10px #6fd3ff; white-space: nowrap; }
+.v-phantom.echo { color: #F4EEE6; }
+
+/* ---- Water in the phone ---- */
+.phone .moisture { padding: 8px 12px; border-radius: 12px; background: rgba(120, 200, 230, .12); border: 1px dashed rgba(143, 208, 255, .5); color: #9fe8ff; font-size: 12px; animation: flick 2.4s infinite steps(1); }
+.phone.crashed .phone-body { animation: crash .5s steps(3); }
+@keyframes crash { 0% { filter: invert(1); transform: translateX(-6px); } 50% { filter: none; transform: translateX(6px); opacity: .2; } 100% { transform: none; } }
+.phone.wet .phone-screen { filter: saturate(.8) hue-rotate(-8deg); }
+.phone.wet .phone-screen::before { box-shadow: 0 0 0 999px rgba(120, 190, 220, calc(var(--wet, 0) * .08)) inset; }
+
+/* ---- Visor themes (unlocked at 100% integrity) ---- */
+body[data-theme="amber"] { --cyan: #FFB347; --hud-line: rgba(255, 179, 71, .4); }
+body[data-theme="white"] { --cyan: #EAF6F6; --hud-line: rgba(234, 246, 246, .4); }
+body[data-theme="bloom"] { --cyan: #FF8FD0; --hud-line: rgba(255, 143, 208, .4); }
+body[data-theme="green"] { --cyan: #7CFF8A; --hud-line: rgba(124, 255, 138, .38); }

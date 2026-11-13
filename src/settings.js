@@ -60,7 +60,8 @@ export function loadSettings(onControls = () => {}) {
   return s;
 }
 
-export function createSettings(el, { onBack, onControls = () => {}, sound = () => {} }) {
+export const THEMES = [['', 'Echo cyan (default)'], ['amber', 'Salvage amber'], ['white', 'Clean white'], ['bloom', 'Deep Bloom pink'], ['green', 'Old sonar green']];
+export function createSettings(el, { onBack, onControls = () => {}, sound = () => {}, themesUnlocked = () => false }) {
   let s = loadSettings(onControls);
   let voices = null, tab = 'sound', waiting = null, startFs = null;
   const save = () => {
@@ -113,6 +114,9 @@ export function createSettings(el, { onBack, onControls = () => {}, sound = () =
       <div class="sbtns"><button type="button" class="secondary" data-reset="controls">Reset controls</button></div>`,
     display: () => `<label class="scheck"><input type="checkbox" data-fs ${document.fullscreenElement || winFs ? 'checked' : ''}> Fullscreen <small>(F11)</small></label>
       ${DESKTOP ? `<label class="scheck"><input type="checkbox" data-startfs ${startFs !== false ? 'checked' : ''}> Start the game in fullscreen</label>` : ''}
+      <p class="sgroup">Visor theme</p>
+      ${themesUnlocked() ? `<label class="srow"><span>HUD colours</span><select data-theme>${THEMES.map(([id, name]) => `<option value="${id}"${(s.theme || '') === id ? ' selected' : ''}>${name}</option>`).join('')}</select></label>`
+        : '<p class="sub" data-tip="Restore all eight visor systems (SYS 100%).">Locked: restore every visor system to unlock new HUD colours.</p>'}
       <p class="sgroup">Help</p>
       <label class="scheck" data-tip="The task card in the top right, one step at a time. The phone's Guide tab has the full list."><input type="checkbox" data-help="showTutorial" ${s.showTutorial ? 'checked' : ''}> Show the tutorial</label>
       <label class="scheck" data-tip="Like this one."><input type="checkbox" data-help="showTips" ${s.showTips ? 'checked' : ''}> Show tooltips when hovering</label>`,
@@ -176,6 +180,7 @@ export function createSettings(el, { onBack, onControls = () => {}, sound = () =
     if (t.matches('[data-mute]')) { s.muted = t.checked; save(); }
     if (t.matches('[data-invert]')) { s.invertY = t.checked; save(); }
     if (t.matches('[data-help]')) { s[t.dataset.help] = t.checked; save(); }
+    if (t.matches('[data-theme]')) { s.theme = t.value; save(); }
     if (t.matches('[data-source]')) {
       const [kind, ...rest] = t.value.split(':'), arg = rest.join(':');
       if (kind === 'pack') { s.source = 'bundled'; s.pack = arg; }

@@ -60,3 +60,48 @@ test('suit state survives saving', () => {
   assert.deepEqual(again.serialize(), suit.serialize());
   assert.ok(PRESSURE.layers.length === 3);
 });
+
+test('cold deep water and heavy breathing fog the glass; air and purging clear it', () => {
+  const suit = createSuit();
+  run(suit, 30, { ...deep, dashing: true });
+  const fogged = suit.fog;
+  assert.ok(fogged > 0.5);
+  const p0 = suit.power;
+  for (let i = 0; i < 10; i++) suit.purge(0.1);
+  assert.ok(suit.fog < fogged && suit.power < p0);
+  run(suit, 10, { ...shallow, surfaced: true });
+  assert.equal(suit.fog, 0);
+});
+
+test('the anti-fog coating halves fogging', () => {
+  const a = createSuit(), b = createSuit();
+  b.addUpgrade('coating');
+  run(a, 10, deep); run(b, 10, deep);
+  assert.ok(Math.abs(b.fog - a.fog / 2) < 0.01);
+});
+
+test('dashing overheats you, the water cools you, and heat drains the battery faster', () => {
+  const suit = createSuit();
+  const evs = run(suit, 15, { ...shallow, dashing: true });
+  assert.ok(evs.some((e) => e.overheat) && suit.overheated);
+  run(suit, 20, deep);
+  assert.ok(!suit.overheated && suit.heat < 0.55);
+});
+
+test('a pressure plate lets you go deeper; a spark guard halves shocks', () => {
+  const suit = createSuit();
+  suit.addUpgrade('plate');
+  run(suit, 30, { ...deep, depth: 24 });
+  assert.equal(suit.stress, 0);
+  assert.equal(suit.shockFactor(), 1);
+  suit.addUpgrade('guard');
+  assert.equal(suit.shockFactor(), 0.5);
+});
+
+test('shocks and leaks get water in the phone; drying it clears it', () => {
+  const suit = createSuit();
+  suit.shocked();
+  assert.ok(suit.phoneWet >= 0.5 && suit.heat > 0);
+  assert.ok(suit.dryPhone());
+  assert.equal(suit.phoneWet, 0);
+});

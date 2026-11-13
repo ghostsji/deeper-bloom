@@ -276,13 +276,30 @@ export function createPhone(el, g) {
       b.dataset.tip = gone ? `<b>${b.dataset.name}: missing</b><br>The flood washed this app away. Find its salvage pod on the reef to get it back.` : TAB_TIPS[b.dataset.tab]();
     });
     const scroll = body.scrollTop;
-    body.innerHTML = missing(tab) ? renderMissing(tab) : RENDER[tab]();
+    const wet = g.suit.phoneWet;
+    el.classList.toggle('wet', wet > 0.2);
+    el.style.setProperty('--wet', wet.toFixed(2));
+    const banner = wet > 0.2 ? '<p class="moisture">Moisture detected: taps may misread and apps may crash. Dry the phone at a cook fire (or leave it on a raft deck).</p>' : '';
+    body.innerHTML = banner + (missing(tab) ? renderMissing(tab) : RENDER[tab]());
     body.scrollTop = scroll;
   }
 
   el.addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;
+    // Water in the phone: sometimes a tap lands on the wrong button.
+    const wet = g.suit.phoneWet;
+    if (wet > 0.2 && !b.dataset.redirected && Math.random() < wet * 0.35) {
+      const others = [...el.querySelectorAll('button:not([disabled])')].filter((x) => x !== b);
+      const other = others[(Math.random() * others.length) | 0];
+      if (other) {
+        g.onMisread?.();
+        other.dataset.redirected = '1';
+        other.click();
+        delete other.dataset.redirected;
+        return;
+      }
+    }
     if (b.dataset.tab) { tab = b.dataset.tab; body.scrollTop = 0; render(); return; }
     if (b.dataset.pick) { g.onPick(b.dataset.pick); return; }
     if ('stop' in b.dataset) { g.onStopBuilding(); render(); return; }
@@ -306,5 +323,11 @@ export function createPhone(el, g) {
       setTimeout(() => { if (!el.classList.contains('up')) el.hidden = true; }, 260);
     },
     render,
+    /** An app crashes back to the home screen (water in the phone). */
+    crash() {
+      tab = 'build';
+      el.classList.remove('crashed'); void el.offsetWidth; el.classList.add('crashed');
+      render();
+    },
   };
 }

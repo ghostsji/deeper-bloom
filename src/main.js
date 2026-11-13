@@ -24,7 +24,7 @@ import { createSuit, POWER } from './suit.js';
 import { createHazards } from './hazards.js';
 import { setTooltips } from './tooltips.js';
 import { keyName } from './controls.js';
-import { initAudio, updateAudio, setMusic, uiSound, pop, chime, thunk, salvagePing, rebootSound, creakSound, glassCrackSound, bubbleSound, lowPowerSound, chargeSound, sparkSound, setPaused, gasp, heartbeat, warn, munch, sizzle, grab, harpoonFire, thud, hiss, bite, release, click } from './audio.js';
+import { initAudio, updateAudio, setMusic, uiSound, pop, chime, thunk, salvagePing, rebootSound, glitchSound, staticSound, creakSound, glassCrackSound, bubbleSound, lowPowerSound, chargeSound, sparkSound, setPaused, gasp, heartbeat, warn, munch, sizzle, grab, harpoonFire, thud, hiss, bite, release, click } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 const BLOOM_FULL = 60;   // Lumen gathered for the reef to glow at full strength
@@ -122,7 +122,10 @@ const combat = createCombat(scene, camera, world, {
 });
 
 // Options opens from the main menu or the pause menu, and Back returns there.
+let settingsNow = {}; // the latest settings (for re-applying the visor theme once it unlocks)
+const applyTheme = () => { document.body.dataset.theme = systems.integrity >= 1 ? settingsNow.theme || '' : ''; };
 const settings = createSettings($('settings'), {
+  themesUnlocked: () => systems.integrity >= 1,
   onBack: () => {
     settings.hide();
     if (state === 'paused') $('pause').hidden = false;
@@ -131,6 +134,8 @@ const settings = createSettings($('settings'), {
     player.setMouse({ sens: s.lookSens, invertY: s.invertY });
     tutorialOn = s.showTutorial !== false;
     setTooltips(s.showTips !== false);
+    settingsNow = s;
+    applyTheme();
   },
   sound: (kind) => uiSound(kind),
 });
@@ -339,8 +344,9 @@ function use(piece) {
   if (piece.id === 'station') openPhone('research');
   if (piece.id === 'fire') {
     const n = survival.cook();
-    if (n) { sizzle(); toast(`Cooked ${n} item${n > 1 ? 's' : ''}`); echoSay('cooked'); progress.track('cooked', n); }
-    else toast('Nothing raw to cook.');
+    const dried = suit.dryPhone();
+    if (n) { sizzle(); toast(`Cooked ${n} item${n > 1 ? 's' : ''}${dried ? ', and dried your phone' : ''}`); echoSay('cooked'); progress.track('cooked', n); }
+    else toast(dried ? 'Dried your phone by the fire.' : 'Nothing raw to cook.');
   }
   if (piece.id === 'workbench') {
     const r = survival.repair('harpoon');
@@ -457,6 +463,7 @@ const phone = createPhone($('phone'), {
   onEat: (id) => eat(id),
   onBuy: (id) => buySkill(id),
   suit,
+  onMisread: () => { click(); toast('The wet phone misread your tap.', { color: '#9fe8ff' }); },
   onCharge: () => {
     if (suit.power >= 100) { toast('Your visor battery is already full.'); return; }
     if (lumen < POWER.lumenCost) { toast(`Charging takes ${POWER.lumenCost} Lumen.`); return; }
@@ -722,6 +729,7 @@ function updateVisor(dt) {
   if ((sysClock -= dt) <= 0 && state === 'playing') {
     sysClock = 0.3;
     for (const s of systems.update()) {
+      if (systems.integrity >= 1) setTimeout(() => { toast('Every system restored. New visor themes unlocked in Options → Display & help.', { color: '#5CF2D6' }); applyTheme(); }, 3000);
       hudFx.restore(s);
       toast(`System restored: ${s.name}`, { color: '#5CF2D6' }); // hudFx plays the reboot sound
       save();
@@ -750,7 +758,8 @@ let lastWorldShock = -9;
 // where: 'visor' | 'phone' (touched the glass) | 'jelly' | 'cable' (swam into live electricity)
 function takeShock(where, dmg = 3) {
   if (state !== 'playing' && state !== 'phone') return;
-  survival.damage(dmg);
+  survival.damage(dmg * suit.shockFactor()); // the Spark guard halves it
+  suit.shocked();
   hurtFlash();
   progress.track('shocks');
   phoneDownUntil = playTime + PHONE_DOWN_SECS;
@@ -775,10 +784,21 @@ function takeShock(where, dmg = 3) {
 onShock(({ where }) => takeShock(where));
 
 // ---- The suit: visor battery, pressure, live electricity --------------------------
-let creakClock = 3, bubbleClock = 0, sparkClock = 0, wasCharging = false;
+let creakClock = 3, bubbleClock = 0, sparkClock = 0, wasCharging = false, purgeHeld = false, purgeClock = 0;
+addEventListener('keydown', (e) => { if (e.code === 'KeyG') purgeHeld = true; });
+addEventListener('keyup', (e) => { if (e.code === 'KeyG') purgeHeld = false; });
+addEventListener('blur', () => { purgeHeld = false; });
 function updateSuit(dt) {
   const depth = Math.max(0, SURFACE_Y - camera.position.y), surfaced = atSurface(), sealed = systems.online('visor');
-  const ev = suit.update(dt, { depth, surfaced, onDeck: player.onFoot, sealed });
+  const ev = suit.update(dt, { depth, surfaced, onDeck: player.onFoot, sealed, dashing: player.dashing, breath: survival.stats.breath });
+  // Holding purge clears the fog, at a little battery.
+  if (purgeHeld && suit.purge(dt) && (purgeClock -= dt) <= 0) { hiss(); purgeClock = 0.9; }
+  if (ev.overheat) {
+    staticSound(0.4);
+    toast('Overheating! Your visor is whiting out and the battery is draining twice as fast. Stop dashing and let the water cool you.', { color: '#ff8f8f' });
+  }
+  // Running out of air: the HUD breaks down with you.
+  hudFx.setAir(Math.max(0, Math.min(1, (30 - survival.stats.breath) / 30)), true);
   const charging = player.onFoot || surfaced;
   if (charging && !wasCharging && suit.power < 99) chargeSound();
   wasCharging = charging;
@@ -801,7 +821,7 @@ function updateSuit(dt) {
     if (camera.position.y < SURFACE_Y) survival.stats.breath = Math.max(0, survival.stats.breath - (100 / 45) * suit.leakBreathFactor() * dt);
     if ((bubbleClock -= dt) <= 0) { bubbleSound(); bubbleClock = 0.6 + Math.random() * 1.2; }
   }
-  hudFx.setSuit({ power: suit.power, charging: charging && suit.power < 100, unpowered: suit.unpowered, crackLayers: sealed ? 0 : suit.crackLayers, stress: suit.stress, leak: suit.leak, sealed });
+  hudFx.setSuit({ power: suit.power, charging: charging && suit.power < 100, unpowered: suit.unpowered, crackLayers: sealed ? 0 : suit.crackLayers, stress: suit.stress, leak: suit.leak, sealed, fog: suit.fog, heat: suit.heat, overheated: suit.overheated });
 
   // Live electricity: crackle as you get close, shock if you touch.
   const hz = hazards.update(dt, t, camera.position);
@@ -910,6 +930,12 @@ function frame() {
   hudFx.text($('depth'), player.onFoot ? 'On deck' : depth < 0.3 ? 'Surface' : `${depth.toFixed(1)} m`, 'depth');
   updateVisor(dt);
   updateAudio(depth, camera.position.y > SURFACE_Y || state === 'title'); // menus aren't muffled
+  // A wet phone: apps crash now and then while it's out.
+  if (state === 'phone' && suit.phoneWet > 0.2 && Math.random() < suit.phoneWet * 0.06 * dt) {
+    phone.crash();
+    glitchSound(1);
+    toast('App crashed: there\'s water in your phone. Dry it at a cook fire.', { color: '#9fe8ff' });
+  }
   composer.render();
   requestAnimationFrame(frame);
 }

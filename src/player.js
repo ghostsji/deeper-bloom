@@ -34,6 +34,7 @@ export function createPlayer(camera, canvas) {
   const keys = new Set();
   let onFoot = false, grounded = false;
   let stun = 0, stunMax = 1; // seconds left stunned: no control, and you sink
+  let dashing = false;       // holding dash while moving (heats the suit)
   let deckAt = () => null; // (x, z) => deck surface height, or null over open water
   // Fallback for when pointer lock isn't available: the free cursor looks around, and
   // resting it near a screen edge keeps turning that way.
@@ -107,7 +108,9 @@ export function createPlayer(camera, canvas) {
 
   function swim(dt, t, p) {
     // Skills: Long fins (swim speed) and Jet fins (dash).
-    const dash = readInput(false) ? SWIM.dashMult * (1 + perk('dash')) : 1;
+    const dashKey = readInput(false);
+    dashing = dashKey && wish.lengthSq() > 0;
+    const dash = dashKey ? SWIM.dashMult * (1 + perk('dash')) : 1;
     vel.addScaledVector(wish, SWIM.accel * (1 + perk('swim')) * dash * dt);
     vel.multiplyScalar(Math.exp(-SWIM.drag * dt));
     // A faint buoyant bob so standing still never feels frozen.
@@ -130,7 +133,9 @@ export function createPlayer(camera, canvas) {
   }
 
   function walk(dt, p) {
-    const dash = readInput(true) ? WALK.dashMult : 1;
+    const dashKey = readInput(true);
+    dashing = dashKey && wish.lengthSq() > 0;
+    const dash = dashKey ? WALK.dashMult : 1;
     vel.x += wish.x * WALK.accel * dash * dt;
     vel.z += wish.z * WALK.accel * dash * dt;
     const k = Math.exp(-(grounded ? WALK.drag : 1) * dt);
@@ -161,6 +166,7 @@ export function createPlayer(camera, canvas) {
     /** Stuns for this many seconds: no movement, sluggish look, and you sink. */
     setStun(secs) { stun = Math.max(stun, secs); stunMax = Math.max(stun, 0.01); vel.multiplyScalar(0.3); },
     get stunned() { return stun > 0; },
+    get dashing() { return dashing; },
     get stunLeft() { return stun; },
     update(dt, t) {
       stun = Math.max(0, stun - dt);

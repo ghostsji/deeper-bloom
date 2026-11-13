@@ -263,6 +263,35 @@ try {
   check('a live cable shocks and stuns you', suitRes.cableHit > 0 && suitRes.stunned, `-${suitRes.cableHit.toFixed(1)} health`);
   check('an electric jelly shocks you', suitRes.jellyHit > 0, `-${suitRes.jellyHit.toFixed(1)} health`);
 
+  // Fog (purged with G), overheating, running out of air, and water in the phone.
+  const suit2 = await run(`
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const visor = document.getElementById('visor');
+    db.camera.position.set(4, 8, 30);
+    db.suit.load({ power: 90, fog: 0.8, heat: 1, phoneWet: 0.9 });
+    await sleep(200);
+    const fog0 = db.suit.fog, glare = visor.classList.contains('glare'), temp = document.getElementById('heat').textContent;
+    dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyG' }));
+    await sleep(800);
+    dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyG' }));
+    const purged = fog0 - db.suit.fog;
+    db.survival.stats.breath = 3;
+    await sleep(300);
+    const airfail = visor.classList.contains('airfail');
+    db.survival.stats.breath = 100;
+    await sleep(2500); // the phone is still rebooting from the jelly's shock
+    dispatchEvent(new KeyboardEvent('keydown', { code: 'Tab' })); dispatchEvent(new KeyboardEvent('keyup', { code: 'Tab' }));
+    await sleep(300);
+    const banner = !!document.querySelector('#phone .moisture');
+    dispatchEvent(new KeyboardEvent('keydown', { code: 'Tab' })); dispatchEvent(new KeyboardEvent('keyup', { code: 'Tab' }));
+    db.suit.load({ power: 90, fog: 0, heat: 0, phoneWet: 0 });
+    await sleep(300);
+    return { purged, glare, temp, airfail, banner };`);
+  check('holding G purges visor fog', suit2.purged > 0.3, `-${suit2.purged.toFixed(2)} fog`);
+  check('overheating whites out the visor', suit2.glare && /HOT/.test(suit2.temp), suit2.temp);
+  check('running out of air breaks the HUD down', suit2.airfail);
+  check('a wet phone warns about moisture', suit2.banner);
+
   const save = await run(`
     const raw = localStorage.getItem('deeperbloom-save-v1');
     const s = raw && JSON.parse(raw);

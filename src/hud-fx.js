@@ -79,6 +79,7 @@ export function createHudFx(root, systems) {
     <div class="v-stress">${[[0.32, 0.3, 4], [0.72, 0.55, 4], [0.45, 0.72, 5]].map((imp, i) => `<div class="v-stress-layer" data-l="${i + 1}">${cracks(1600, 900, 31 + i * 7, [imp], true)}</div>`).join('')}</div>
     <div class="v-leak"><svg viewBox="0 0 1600 40" preserveAspectRatio="none"><path d="M0 20 Q80 6 160 20 T320 20 T480 20 T640 20 T800 20 T960 20 T1120 20 T1280 20 T1440 20 T1600 20 V40 H0Z"/></svg>
       ${Array.from({ length: 9 }, (_, i) => `<i class="bub" style="left:${6 + i * 11}%;--d:${(i * 0.7) % 3}s"></i>`).join('')}</div>
+    <div class="v-fog"></div><div class="v-tunnel"></div><div class="v-glare"></div><div class="v-phantom"></div>
     <div class="v-scan"></div><div class="v-static"></div>
     <i class="v-corner tl"></i><i class="v-corner tr"></i><i class="v-corner bl"></i><i class="v-corner br"></i><div class="v-flash"></div>`;
   const integrityEl = $('#integrity');
@@ -135,11 +136,12 @@ export function createHudFx(root, systems) {
     const t = texts.get(el);
     const sys = t.sys && !systems.online(t.sys) ? t.sys : null;
     // Damaged readouts break up badly in a burst and a little the rest of the time.
-    const p = !sys ? 0 : bursts[sys].until > now ? 0.55 : sys === 'comms' ? 0.1 : 0;
+    const p = Math.max(!sys ? 0 : bursts[sys].until > now ? 0.55 : sys === 'comms' ? 0.1 : 0, t.sys === 'comms' ? air * 0.5 : 0);
     const shown = p ? scramble(t.text, p) : t.text;
     if (t.prefix) el.innerHTML = `${t.prefix}${shown.replace(/</g, '&lt;')}`; else el.textContent = shown;
   }
-  let now = 0;
+  let now = 0, air = 0, phantomUntil = 0;
+  const heatEl = $('#heat'), phantom = visor.querySelector('.v-phantom');
 
   /** Shows text in a HUD readout that the given system's damage can scramble. */
   function text(el, value, sys, prefix = '') {
@@ -176,6 +178,32 @@ export function createHudFx(root, systems) {
   return {
     text,
     restore,
+    /** Running out of air (0 fine .. 1 about to black out): the HUD breaks down with you. */
+    setAir(a, playing) {
+      const was = air;
+      air = playing ? a : 0;
+      visor.style.setProperty('--air', air.toFixed(3));
+      visor.classList.toggle('airfail', air > 0.05);
+      // Readouts drop out at random, more often the worse it gets.
+      for (const q of ['.lumen', '.datacount', '.depthbox', '.stats', '#compass', '#tutorial']) {
+        const el = root.querySelector(q);
+        if (!el) continue;
+        if (air > 0.35 && Math.random() < air * 0.04) el.classList.toggle('airdrop');
+        if (air <= 0.35) el.classList.remove('airdrop');
+      }
+      if (Math.abs(was - air) > 0.02) for (const [el, tx] of texts) if (tx.sys === 'comms') paint(el);
+      // Near the end: things that aren't there.
+      if (air > 0.75 && now > phantomUntil && Math.random() < 0.012) {
+        const kinds = ['eel', 'marker', 'restored', 'echo'];
+        const k = kinds[(Math.random() * kinds.length) | 0];
+        phantom.className = `v-phantom on ${k}`;
+        phantom.style.left = `${15 + Math.random() * 70}%`;
+        phantom.style.top = `${20 + Math.random() * 55}%`;
+        phantom.textContent = k === 'restored' ? 'SYSTEM RESTORED: ▒▒▒▒' : k === 'echo' ? "ECHO: I'm right behind you." : '';
+        phantomUntil = now + 1.6;
+        setTimeout(() => { phantom.className = 'v-phantom'; }, 1300);
+      }
+    },
     /** The suit's state each frame: battery, systems cut for power, pressure cracks, the leak. */
     setSuit(st) {
       const was = suit;
@@ -193,6 +221,13 @@ export function createHudFx(root, systems) {
       strainEl.hidden = st.sealed || st.stress <= 0.01;
       strainEl.style.setProperty('--s', st.stress.toFixed(3));
       strainEl.classList.toggle('max', st.stress >= 1);
+      visor.style.setProperty('--fog', (st.fog ?? 0).toFixed(3));
+      visor.classList.toggle('glare', !!st.overheated);
+      const hp = Math.round((st.heat ?? 0) * 100);
+      const hHtml = `<span>TEMP</span><i style="--v:${(st.heat ?? 0).toFixed(3)}"></i><b>${st.overheated ? 'HOT' : `${hp}%`}</b>`;
+      if (heatEl.innerHTML !== hHtml) heatEl.innerHTML = hHtml;
+      heatEl.classList.toggle('warm', hp >= 70);
+      heatEl.classList.toggle('hot', !!st.overheated);
     },
     refresh() { setParts(); for (const el of texts.keys()) paint(el); },
     // info: { heading, points: [{ kind, bearing, dist }], playing }
