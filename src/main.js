@@ -3,7 +3,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { buildWorld, SURFACE_Y } from './world.js';
+import { buildWorld, SURFACE_Y, floorY } from './world.js';
 import { createPlayer } from './player.js';
 import { createBuilder, PIECES, FARM_MAX } from './build.js';
 import { createSurvival, ITEMS, GEAR, gearMax, bagSize } from './survival.js';
@@ -100,7 +100,11 @@ const combat = createCombat(scene, camera, world, {
   onFire: () => { harpoonFire(); survival.wear('harpoon'); renderGear(); tutorial.note('fire'); },
   onHit: () => { thud(); progress.track('hits'); },
   onSpot: () => { hiss(); echoSay('eel'); },
+  // Electric eels: a crackle as one charges up, then a shock if its ring catches you.
+  onEelCharge: () => sparkSound(1),
+  onEelZap: () => { shockAt(innerWidth / 2, innerHeight / 2); takeShock('eel', 5); },
   onBite: (dmg) => {
+    silt = Math.min(1, silt + 0.5); // the thrashing stirs up the sand
     bite();
     survival.damage(dmg);
     hurtFlash();
@@ -745,7 +749,8 @@ function updateVisor(dt) {
   if (systems.online('nav')) for (const pod of salvage.remaining()) points.push(point(pod.kind === 'cell' ? 'cell' : 'pod', pod.pos));
   if (systems.online('sensor')) for (const h of hazards.sources) { const at = h.pos(); if (at.distanceTo(p) < 45) points.push({ ...point('hazard', at), dist: null }); }
   if (systems.online('sensor')) for (const e of combat.eelPositions()) if (e.distanceTo(p) < 45) points.push({ ...point('eel', e), dist: null });
-  hudFx.update(dt, t, { heading: Math.atan2(_dir.x, -_dir.z), points, playing: state === 'playing' });
+  // Silt makes the compass jitter.
+  hudFx.update(dt, t, { heading: Math.atan2(_dir.x, -_dir.z) + (Math.random() - 0.5) * silt * 1.2, points, playing: state === 'playing' });
 }
 
 // ---- Touching the cracks --------------------------------------------------------------
@@ -778,12 +783,14 @@ function takeShock(where, dmg = 3) {
     visor: "Zap! The cracked visor is live. Don't touch the cracks.",
     jelly: 'Zap! That jelly is carrying a charge. Give the pale ones room.',
     cable: 'Zap! That cable is still live. Keep clear of the sparking end.',
+    eel: 'Zap! That eel discharged. When one flickers blue, swim out of reach.',
   };
-  if (where === 'jelly' || where === 'cable' || shocked++ < 2) toast(MSG[where], { color: '#9fe8ff' });
+  if (where === 'jelly' || where === 'cable' || where === 'eel' || shocked++ < 2) toast(MSG[where], { color: '#9fe8ff' });
 }
 onShock(({ where }) => takeShock(where));
 
 // ---- The suit: visor battery, pressure, live electricity --------------------------
+let silt = 0, surgeBlockedSaid = false;
 let creakClock = 3, bubbleClock = 0, sparkClock = 0, wasCharging = false, purgeHeld = false, purgeClock = 0;
 addEventListener('keydown', (e) => { if (e.code === 'KeyG') purgeHeld = true; });
 addEventListener('keyup', (e) => { if (e.code === 'KeyG') purgeHeld = false; });
@@ -825,6 +832,12 @@ function updateSuit(dt) {
 
   // Live electricity: crackle as you get close, shock if you touch.
   const hz = hazards.update(dt, t, camera.position);
+  if (hz.surgeWarn) { chargeSound(); toast('Power surge building in the cables! Keep clear of them.', { color: '#fff27a' }); surgeBlockedSaid = false; }
+  if (hz.surge) { staticSound(0.5); sparkSound(1); }
+  // Silt: swimming fast along the bottom stirs it up; it settles slowly.
+  const nearFloor = camera.position.y - floorY(camera.position.x, camera.position.z) < 1.8;
+  silt = Math.max(0, Math.min(1, silt + (nearFloor && !player.onFoot && player.speed > 3 ? 0.45 : -0.12) * dt));
+  world.setSilt(silt);
   if (hz.nearest < 8 && (sparkClock -= dt) <= 0) {
     sparkSound(1 - hz.nearest / 8);
     sparkClock = 0.15 + Math.random() * 0.5 * (hz.nearest / 8);
@@ -850,7 +863,8 @@ function updateStun() {
 // ---- Salvage pods (lost phone apps) ---------------------------------------------------
 let pingClock = 0;
 function updateSalvage(dt) {
-  const { got, nearest } = salvage.update(t, camera.position);
+  const { got, nearest, blocked } = salvage.update(t, camera.position, (pos) => !hazards.cutOff(pos));
+  if (blocked && !surgeBlockedSaid) { surgeBlockedSaid = true; toast("That pod is cut off by the surge. Wait for it to pass.", { color: '#fff27a' }); }
   if (got) {
     rebootSound();
     if (got.kind === 'cell') {
@@ -916,7 +930,9 @@ function frame() {
   builder.update(t, camera, building);
   $('buildbar').hidden = !(state === 'playing' && placing && !lensOn);
   if (placing) renderBuildBar();
-  const scan = state === 'playing' && lensOn ? research.update(dt, camera, world.scannables, scanHeld) : null;
+  // Thick silt stops the lens locking on.
+  const scan = state === 'playing' && lensOn ? research.update(dt, camera, world.scannables, scanHeld && silt < 0.4) : null;
+  if (scan && silt >= 0.4) scan.status = 'Too much silt to lock on';
   $('scanlabel').hidden = !scan;
   $('scanring').style.setProperty('--p', scan ? scan.progress : 0);
   if (scan) {
@@ -942,7 +958,7 @@ function frame() {
 
 
 // ?debug exposes the internals in the console.
-if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, systems, hudFx, salvage, suit, hazards, addLumen: (n) => setLumen(lumen + n) } });
+if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, systems, hudFx, salvage, suit, hazards, setSilt: (v) => { silt = v; }, getSilt: () => silt, addLumen: (n) => setLumen(lumen + n) } });
 
 renderBuildBar();
 load();

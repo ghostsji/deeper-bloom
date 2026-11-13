@@ -76,8 +76,9 @@ export function createSalvage(scene, kelpPatches) {
     load(ids) { for (const p of pods) { p.found = (ids || []).includes(p.app.id); p.g.visible = !p.found; } },
     serialize: () => pods.filter((p) => p.found).map((p) => p.app.id),
     /** Animates the pods; returns the app picked up this frame (or null) and the nearest distance. */
-    update(t, pos) {
-      let got = null, nearest = Infinity;
+    // canTake(pos): false while a pod is cut off (a power surge near it).
+    update(t, pos, canTake = () => true) {
+      let got = null, nearest = Infinity, blocked = null;
       for (const p of pods) {
         if (p.found) continue;
         const blink = (Math.sin(t * 4 + p.phase) > 0.6) ? 1 : 0.15;
@@ -91,13 +92,14 @@ export function createSalvage(scene, kelpPatches) {
         p.ring.material.opacity = 0.5 * (1 - ping);
         const d = p.g.position.distanceTo(pos);
         nearest = Math.min(nearest, d);
+        if (d < PICKUP && !got && !canTake(p.g.position)) { blocked = p.app; continue; }
         if (d < PICKUP && !got) {
           p.found = true;
           p.g.visible = false;
           got = p.app;
         }
       }
-      return { got, nearest };
+      return { got, nearest, blocked };
     },
   };
 }

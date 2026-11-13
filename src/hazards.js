@@ -9,6 +9,9 @@ import { floorY } from './world.js';
 export const LIVE_JELLIES = [1, 4, 7];        // which of the reef's jellies are electric
 export const JELLY_RANGE = 2;                 // metres from a live jelly's bell
 export const SPARK_RANGE = 1.7;               // metres from a cable's frayed end
+// Power surges: every so often current pulses down every cable. A glowing pulse runs along
+// each one, the frayed ends reach three times as far, and nearby pods can't be reached.
+export const SURGE = { every: [40, 80], warn: 2, length: 4, reach: 3, podRadius: 5 };
 // Broken cables: a junction box at (x, z), and the cable running off at angle ang.
 export const CABLE_SITES = [
   { x: -20, z: -12, ang: 0.4 },
@@ -92,7 +95,11 @@ export function createHazards(scene, jellies) {
       pts.push(new THREE.Vector3(x, floorY(x, z) + 0.15 + Math.sin(f * Math.PI) * 0.3, z));
     }
     pts[pts.length - 1].copy(end);
-    const cable = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.09, 6), cableMat);
+    const curve = new THREE.CatmullRomCurve3(pts);
+    const cable = new THREE.Mesh(new THREE.TubeGeometry(curve, 40, 0.09, 6), cableMat);
+    // The surge pulse that runs down the cable.
+    const pulse = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 8), new THREE.MeshBasicMaterial({ color: 0xeafcff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    pulse.visible = false;
     // Frayed copper at the end, glowing hot, with arcs and sparks.
     const fray = new THREE.Group();
     fray.position.copy(end);
@@ -113,16 +120,33 @@ export function createHazards(scene, jellies) {
     const sparks = new THREE.Points(sparkGeo, new THREE.PointsMaterial({ color: 0xfff2c0, size: 0.13, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
     sparks.frustumCulled = false;
     fray.add(sparks);
-    g.add(box, stripe, cable, fray);
+    g.add(box, stripe, cable, fray, pulse);
     scene.add(g);
-    sources.push({ kind: 'cable', range: SPARK_RANGE, arcs: a, glow, sparks, sparkPos, pos: () => end });
+    sources.push({ kind: 'cable', range: SPARK_RANGE, arcs: a, glow, sparks, sparkPos, curve, pulse, pos: () => end });
   }
 
-  let arcClock = 0;
+  let arcClock = 0, surgeAt = SURGE.every[0], surgeT = -1;
   return {
     sources,
+    /** Starts a surge now (for testing). */
+    forceSurge() { surgeAt = 0.01; surgeT = -1; },
+    /** True while a surge is running down the cables. */
+    get surging() { return surgeT >= 0 && surgeT < SURGE.length; },
+    /** Is a spot cut off by a surge (too close to a cable end)? */
+    cutOff(pos) { return this.surging && sources.some((s) => s.kind === 'cable' && s.pos().distanceTo(pos) < SURGE.podRadius); },
     /** Animates the hazards. Returns the source you're touching (or null) and how far the nearest one is. */
     update(dt, t, playerPos) {
+      // Surges: a warning, then a few seconds of high current.
+      const ev = {};
+      if (surgeT < 0) {
+        surgeAt -= dt;
+        if (surgeAt <= SURGE.warn && surgeAt + dt > SURGE.warn) ev.surgeWarn = true;
+        if (surgeAt <= 0) { surgeT = 0; ev.surge = true; }
+      } else {
+        surgeT += dt;
+        if (surgeT >= SURGE.length) { surgeT = -1; surgeAt = SURGE.every[0] + Math.random() * (SURGE.every[1] - SURGE.every[0]); }
+      }
+      const surging = this.surging;
       arcClock -= dt;
       const regen = arcClock <= 0;
       if (regen) arcClock = 0.06;
@@ -132,16 +156,20 @@ export function createHazards(scene, jellies) {
         const burst = Math.sin(t * 7.3 + s.range * 10 + sources.indexOf(s)) > -0.2 || Math.random() < 0.1;
         if (regen) s.arcs.regen(burst);
         if (s.kind === 'cable') {
-          s.glow.material.opacity = burst ? 0.35 + Math.random() * 0.35 : 0.08;
+          s.pulse.visible = surging;
+          if (surging) s.pulse.position.copy(s.curve.getPointAt((surgeT * 1.6) % 1));
+          s.glow.scale.setScalar(surging ? 2.2 : 1);
+          s.glow.material.opacity = surging ? 0.6 + Math.random() * 0.3 : burst ? 0.35 + Math.random() * 0.35 : 0.08;
           s.sparks.visible = burst;
           if (burst && regen) for (let i = 0; i < s.sparkPos.length; i++) s.sparkPos[i] = (Math.random() - 0.5) * 0.9 + (i % 3 === 1 ? 0.25 : 0);
           s.sparks.geometry.attributes.position.needsUpdate = burst && regen;
         }
         const d = s.pos().distanceTo(playerPos);
         nearest = Math.min(nearest, d);
-        if (d < s.range && !hit) hit = s;
+        const reach = s.kind === 'cable' && surging ? s.range * SURGE.reach : s.range;
+        if (d < reach && !hit) hit = s;
       }
-      return { hit, nearest };
+      return { hit, nearest, ...ev };
     },
   };
 }

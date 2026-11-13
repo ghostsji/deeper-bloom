@@ -292,6 +292,37 @@ try {
   check('running out of air breaks the HUD down', suit2.airfail);
   check('a wet phone warns about moisture', suit2.banner);
 
+  // Electric eels discharge, cables surge, and silt clouds the water.
+  const haz2 = await run(`
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const P = await import('./src/progress.js');
+    const e = db.combat.eels.find((x) => x.electric && x.alive);
+    const s0 = P.stat('shocks');
+    db.camera.position.copy(e.segs[0].position).add({ x: 0, y: 0, z: 3.5 });
+    e.mode = 'chase'; e.zapNext = 0;
+    await sleep(2200);
+    const eelZap = P.stat('shocks') - s0;
+    db.camera.position.set(0, 12, 24);
+    await sleep(2800);
+    db.hazards.forceSurge();
+    await sleep(150);
+    const surging = db.hazards.surging;
+    const cable = db.hazards.sources.find((h) => h.kind === 'cable');
+    const s1 = P.stat('shocks');
+    db.camera.position.copy(cable.pos()).add({ x: 3.2, y: 0.6, z: 0 });
+    await sleep(300);
+    const surgeZap = P.stat('shocks') - s1;
+    db.camera.position.set(0, 12, 24);
+    db.setSilt(0.9);
+    await sleep(200);
+    const fog = db.scene.fog.density;
+    db.setSilt(0);
+    await sleep(3000);
+    return { eelZap, surging, surgeZap, fog };`);
+  check('an electric eel discharges and shocks you', haz2.eelZap > 0, `${haz2.eelZap} shock(s)`);
+  check('a power surge makes cables reach much further', haz2.surging && haz2.surgeZap > 0);
+  check('silt clouds the water', haz2.fog > 0.12, haz2.fog.toFixed(3));
+
   const save = await run(`
     const raw = localStorage.getItem('deeperbloom-save-v1');
     const s = raw && JSON.parse(raw);

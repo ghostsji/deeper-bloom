@@ -68,6 +68,9 @@ export function buildWorld(scene) {
 
   // How brightly the reef glows: rises as you gather Lumen. 0..1
   let bloom = 0;
+  // Stirred-up silt clouding the water (0 clear .. 1 you can barely see). See main.js.
+  let silt = 0;
+  const siltFog = new THREE.Color(0x3b3a2a);
 
   return {
     echo,
@@ -76,6 +79,7 @@ export function buildWorld(scene) {
     kelpPatches,
     kelpMesh: kelp.mesh,
     setBloom(v) { bloom = v; },
+    setSilt(v) { silt = v; },
     update(dt, t, camera, playerSpeed = 0) {
       time.value = t;
       hemi.intensity = 0.9 + bloom * 0.7;
@@ -83,7 +87,8 @@ export function buildWorld(scene) {
       const above = camera.position.y > SURFACE_Y;
       scene.fog.color.copy(above ? airFog : waterFog);
       scene.background.copy(scene.fog.color);
-      scene.fog.density = above ? 0.009 : 0.03 - bloom * 0.008;
+      scene.fog.density = above ? 0.009 : 0.03 - bloom * 0.008 + silt * 0.16;
+      if (!above && silt > 0) { scene.fog.color.lerp(siltFog, silt * 0.75); scene.background.copy(scene.fog.color); }
       sky.visible = above;
       rays.visible = !above;
       surface.under.visible = !above;

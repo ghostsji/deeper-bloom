@@ -10,10 +10,15 @@ const EEL = {
   idle: 2, chase: 5.2, lunge: 9.5,   // m/s (you swim about 5.4, 12 dashing)
   sight: 14, leash: 32, lungeRange: 4.2, biteRange: 1.6, bite: 18, retreat: 2.2,
   respawn: 120, safeFromSpawn: 26,   // eels never nest this close to where you start
+  // Electric eels (every other one) build up a charge while hunting you, then discharge: a
+  // ring of electricity that bursts out to `zap` metres. Swim out of it or get shocked.
+  zap: 7, zapCharge: 1.1, zapSpeed: 11, zapEvery: [6, 10], zapRange: 9,
 };
+const ZAP_MAT = new THREE.MeshBasicMaterial({ color: 0x9fe8ff, wireframe: true, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false });
 
 // The harpoon is held in front of the camera; eels live in kelp patches and hunt anything
-// that swims too close. g: { onBite(dmg), onEelKilled(pos), onFishSpeared(), onHit(), onFire(), onSpot() }
+// that swims too close. g: { onBite(dmg), onEelKilled(pos), onFishSpeared(), onHit(), onFire(), onSpot(),
+// onEelCharge(), onEelZap() }
 export function createCombat(scene, camera, world, g) {
   scene.add(camera); // so the held harpoon (a child of the camera) renders
 
@@ -104,18 +109,20 @@ export function createCombat(scene, camera, world, g) {
   // ---- Blighted eels ----
   const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2a1a3a, roughness: 0.6, emissive: 0x1a0820, emissiveIntensity: 0.4 });
   const blightMat = new THREE.MeshStandardMaterial({ color: 0xff9a5c, emissive: 0xff9a5c, emissiveIntensity: 2.4 });
+  const voltMat = new THREE.MeshStandardMaterial({ color: 0x9fe8ff, emissive: 0x9fe8ff, emissiveIntensity: 2.6 });
   const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffd36b, emissive: 0xffc46b, emissiveIntensity: 3 });
   const segGeo = new THREE.SphereGeometry(1, 10, 8), spotGeo = new THREE.SphereGeometry(0.05, 6, 4);
 
   const homes = world.kelpPatches.filter((p) => Math.hypot(p.x, p.z - 24) > EEL.safeFromSpawn).slice(0, EEL.count);
   const eels = homes.map((home, n) => {
     const mat = bodyMat.clone(); // its own, so only this eel flashes when hit
+    const electric = n % 2 === 1;
     const segs = [];
     for (let i = 0; i < EEL.segments; i++) {
       const r = i === 0 ? 0.24 : 0.2 * (1 - i / EEL.segments) + 0.05;
       const sg = new THREE.Mesh(segGeo, mat);
       sg.scale.set(r, r * 0.85, i === 0 ? r * 1.9 : r * 2.4); // stretched so segments overlap into one body
-      if (i % 3 === 1) { const spot = new THREE.Mesh(spotGeo, blightMat); spot.position.set(0, 0.8, 0); sg.add(spot); }
+      if (i % 3 === 1) { const spot = new THREE.Mesh(spotGeo, electric ? voltMat : blightMat); spot.position.set(0, 0.8, 0); sg.add(spot); }
       if (i === 0) {
         for (const x of [-0.45, 0.45]) { const eye = new THREE.Mesh(spotGeo, eyeMat); eye.position.set(x, 0.35, 0.6); eye.scale.setScalar(1.3); sg.add(eye); }
         sg.userData.scan = { species: 'eel', id: `eel:${n}` };
@@ -128,6 +135,7 @@ export function createCombat(scene, camera, world, g) {
     return {
       home: new THREE.Vector3(home.x, home.y + 3, home.z), segs, mat, health: EEL.health, alive: true,
       mode: 'idle', modeT: 0, vel: new THREE.Vector3(), phase: n * 1.7, back: 0, flash: 0, dying: 0,
+      electric, zapNext: EEL.zapEvery[0], charging: 0, ring: null, ringR: 0, ringHit: false,
     };
   });
 
@@ -141,6 +149,39 @@ export function createCombat(scene, camera, world, g) {
       e.alive = false; e.dying = 1.6; e.back = t + EEL.respawn;
       g.onEelKilled(e.segs[0].position.clone());
     } else { e.mode = 'retreat'; e.modeT = 1.2; }
+  }
+
+  // An electric eel hunting you charges up (flickering blue), then discharges a ring.
+  function zap(e, dt, dist, exposed) {
+    const head = e.segs[0];
+    if (e.ring) {
+      e.ringR += EEL.zapSpeed * dt;
+      e.ring.position.copy(head.position);
+      e.ring.scale.setScalar(Math.max(0.01, e.ringR));
+      e.ring.material.opacity = 0.8 * (1 - e.ringR / EEL.zap);
+      e.ring.rotation.y += dt * 4;
+      // The ring passes you: shocked, unless you got out of its reach (or onto a raft).
+      if (!e.ringHit && exposed && Math.abs(e.ringR - head.position.distanceTo(camera.position)) < 0.9) { e.ringHit = true; g.onEelZap(); }
+      if (e.ringR >= EEL.zap) { scene.remove(e.ring); e.ring.material.dispose(); e.ring = null; }
+      return;
+    }
+    if (e.charging > 0) {
+      e.charging -= dt;
+      e.mat.emissive.setHex(Math.random() < 0.5 ? 0x9fe8ff : 0x1a0820);
+      if (e.charging <= 0) {
+        e.ring = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 2), ZAP_MAT.clone());
+        e.ringR = 0.2; e.ringHit = false;
+        scene.add(e.ring);
+        e.mat.emissive.setHex(0x1a0820);
+      }
+      return;
+    }
+    e.zapNext -= dt;
+    if (exposed && (e.mode === 'chase' || e.mode === 'lunge') && dist < EEL.zapRange && e.zapNext <= 0) {
+      e.charging = EEL.zapCharge;
+      e.zapNext = EEL.zapEvery[0] + Math.random() * (EEL.zapEvery[1] - EEL.zapEvery[0]);
+      g.onEelCharge();
+    }
   }
 
   const want = new THREE.Vector3(), toPlayer = new THREE.Vector3();
@@ -199,12 +240,14 @@ export function createCombat(scene, camera, world, g) {
       }
       e.flash -= dt;
       e.mat.emissive.setHex(e.flash > 0 ? 0xff3050 : 0x1a0820);
+      if (e.electric) zap(e, dt, dist, playerExposed);
     }
   }
 
   return {
     get equipped() { return equipped; },
     get loaded() { return !shot; },
+    get eels() { return eels; }, // for debugging and tests
     /** Where the living eels are (for the threat sensor on the compass). */
     eelPositions: () => eels.filter((e) => e.alive).map((e) => e.segs[0].getWorldPosition(new THREE.Vector3())),
     setEquipped(v) { equipped = v; gun.visible = v; },
