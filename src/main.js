@@ -22,6 +22,10 @@ import { createSalvage, APPS } from './salvage.js';
 import { onShock, shockAt } from './shock.js';
 import { createSuit, POWER } from './suit.js';
 import { createHazards } from './hazards.js';
+import { createOutpost, createWrecks, FUSES_NEEDED } from './outpost.js';
+import { createRewire } from './rewire.js';
+import { LOGS, FULL_MEMORY } from './logs.js';
+import { UPGRADES } from './suit.js';
 import { setTooltips } from './tooltips.js';
 import { keyName } from './controls.js';
 import { initAudio, updateAudio, setMusic, uiSound, pop, chime, thunk, salvagePing, rebootSound, glitchSound, staticSound, creakSound, glassCrackSound, bubbleSound, lowPowerSound, chargeSound, sparkSound, setPaused, gasp, heartbeat, warn, munch, sizzle, grab, harpoonFire, thud, hiss, bite, release, click } from './audio.js';
@@ -77,6 +81,10 @@ const salvage = createSalvage(scene, world.kelpPatches);
 // The suit (visor battery, pressure on the glass) and the live electricity on the reef.
 const suit = createSuit();
 const hazards = createHazards(scene, world.jellies);
+// The sunken outpost (fuses, a console, electric grates, a vault) and two wrecks.
+const outpost = createOutpost(scene);
+createWrecks(scene);
+let fusesHeld = 0;
 const survival = createSurvival({
   onBlackout: blackout,
   onChange: () => { renderBag(); save(); },
@@ -178,7 +186,7 @@ function updateSubtitle(t) {
     lineUntil = t + 3 + next.text.length * 0.06 + settings.gap; // reading time
     chime();
     // Spoken lines stay up until Echo finishes (with a generous cap in case speech stalls).
-    if (speakLine(next, () => { lineUntil = Math.min(lineUntil, playTime + settings.gap); })) lineUntil = t + 8 + next.text.length * 0.12;
+    if (!next.silent && speakLine(next, () => { lineUntil = Math.min(lineUntil, playTime + settings.gap); })) lineUntil = t + 8 + next.text.length * 0.12;
   } else {
     $('subtitle').classList.remove('show');
   }
@@ -215,7 +223,7 @@ function gather(n, bright) {
 function save() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      lumen, builds: builder.serialize(), research: research.serialize(), survival: survival.serialize(), progress: progress.serialize(), tutorial: tutorial.serialize(), systems: systems.serialize(), apps: salvage.serialize(), suit: suit.serialize(),
+      lumen, builds: builder.serialize(), research: research.serialize(), survival: survival.serialize(), progress: progress.serialize(), tutorial: tutorial.serialize(), systems: systems.serialize(), apps: salvage.serialize(), suit: suit.serialize(), outpost: outpost.serialize(), fusesHeld,
       satchel: satchel && { pos: satchel.pos.toArray(), items: satchel.items },
     }));
   } catch { /* not saved */ }
@@ -230,6 +238,9 @@ function load() {
     systems.load(data.systems);
     salvage.load(data.apps);
     suit.load(data.suit);
+    outpost.load(data.outpost);
+    if (outpost.powered) salvage.unlockVault();
+    fusesHeld = data.fusesHeld || 0;
     builder.load(data.builds);
     setLumen(data.lumen || 0);
     renderHudData();
@@ -480,6 +491,8 @@ const phone = createPhone($('phone'), {
   tutorial,
   systems,
   hasApp: (id) => salvage.found(id),
+  logs: () => LOGS.filter((l) => salvage.found(`pod-${l.id}`)),
+  fullMemory: FULL_MEMORY,
   onTutorial: (act) => {
     if (act === 'skip') tutorial.skip();
     if (act === 'resume') tutorial.load({ ...tutorial.serialize(), skipped: false });
@@ -586,6 +599,7 @@ function setState(s) {
   $('hud').hidden = s === 'title';
   setPaused(s !== 'playing' && s !== 'title'); // menu music plays at full volume
   pauseVoice(s !== 'playing' && s !== 'blackout');
+  if (s !== 'rewire') rewire.close();
   if (s !== 'playing') { player.clearKeys(); setLens(false); document.body.classList.remove('stunned'); $('stunnote').hidden = true; }
 }
 
@@ -687,7 +701,12 @@ addEventListener('keydown', (e) => {
   else if (e.code === 'KeyJ' && state === 'playing') openPhone('codex');
   if (e.code === 'KeyX' && state === 'playing' && placing) stopPlacing();
   if (e.code === 'Digit1' && state === 'playing' && !player.stunned) toggleHarpoon();
-  if (e.code === 'KeyF' && state === 'playing' && !player.stunned && !lensOn && usable()) use(usable());
+  if (e.code === 'KeyF' && state === 'playing' && !player.stunned && !lensOn && outpost.nearConsole(camera.position)) fitFuses();
+  else if (e.code === 'KeyF' && state === 'playing' && !player.stunned && !lensOn && usable()) use(usable());
+  // V: the visor panel, to rewire a system you've got the part for.
+  if (e.code === 'KeyV' && state === 'playing' && !player.stunned) openRewire();
+  else if (e.code === 'KeyV' && state === 'rewire') engage();
+  if (e.code === 'Escape' && state === 'rewire') setState('paused');
   if (e.code === 'KeyR' && state === 'playing' && !player.stunned) eat();
   // Esc can't re-lock the mouse (browsers don't count it as a gesture), so it goes to the pause screen.
   if (e.code === 'Escape' && state === 'phone') setState('paused');
@@ -733,9 +752,9 @@ function updateVisor(dt) {
   if ((sysClock -= dt) <= 0 && state === 'playing') {
     sysClock = 0.3;
     for (const s of systems.update()) {
-      if (systems.integrity >= 1) setTimeout(() => { toast('Every system restored. New visor themes unlocked in Options → Display & help.', { color: '#5CF2D6' }); applyTheme(); }, 3000);
-      hudFx.restore(s);
-      toast(`System restored: ${s.name}`, { color: '#5CF2D6' }); // hudFx plays the reboot sound
+      toast(`Part recovered for ${s.name}. Press ${keyName('rewire')} to rewire it.`, { color: '#5CF2D6' });
+      chime();
+      hudFx.refresh();
       save();
     }
   }
@@ -746,7 +765,8 @@ function updateVisor(dt) {
   const deck = builder.deckNear(p);
   if (deck) points.push(point('raft', deck));
   if (satchel) points.push(point('satchel', satchel.pos));
-  if (systems.online('nav')) for (const pod of salvage.remaining()) points.push(point(pod.kind === 'cell' ? 'cell' : 'pod', pod.pos));
+  if (systems.online('nav')) for (const pod of salvage.remaining()) points.push(point(pod.kind === 'app' ? 'pod' : pod.kind, pod.pos));
+  if (systems.online('nav') && !outpost.powered) points.push(point('outpost', outpost.consolePos));
   if (systems.online('sensor')) for (const h of hazards.sources) { const at = h.pos(); if (at.distanceTo(p) < 45) points.push({ ...point('hazard', at), dist: null }); }
   if (systems.online('sensor')) for (const e of combat.eelPositions()) if (e.distanceTo(p) < 45) points.push({ ...point('eel', e), dist: null });
   // Silt makes the compass jitter.
@@ -762,7 +782,7 @@ const phoneDown = () => Math.max(0, phoneDownUntil - playTime);
 let lastWorldShock = -9;
 // where: 'visor' | 'phone' (touched the glass) | 'jelly' | 'cable' (swam into live electricity)
 function takeShock(where, dmg = 3) {
-  if (state !== 'playing' && state !== 'phone') return;
+  if (state !== 'playing' && state !== 'phone' && state !== 'rewire') return;
   survival.damage(dmg * suit.shockFactor()); // the Spark guard halves it
   suit.shocked();
   hurtFlash();
@@ -784,8 +804,10 @@ function takeShock(where, dmg = 3) {
     jelly: 'Zap! That jelly is carrying a charge. Give the pale ones room.',
     cable: 'Zap! That cable is still live. Keep clear of the sparking end.',
     eel: 'Zap! That eel discharged. When one flickers blue, swim out of reach.',
+    grate: 'Zap! That floor grate is live. Cross when its glow goes out.',
+    wire: "Zap! Wrong socket. Wait for the diagram to show each wire's symbol.",
   };
-  if (where === 'jelly' || where === 'cable' || where === 'eel' || shocked++ < 2) toast(MSG[where], { color: '#9fe8ff' });
+  if (!['phone', 'visor'].includes(where) || shocked++ < 2) toast(MSG[where], { color: '#9fe8ff' });
 }
 onShock(({ where }) => takeShock(where));
 
@@ -842,6 +864,12 @@ function updateSuit(dt) {
     sparkSound(1 - hz.nearest / 8);
     sparkClock = 0.15 + Math.random() * 0.5 * (hz.nearest / 8);
   }
+  const op = outpost.update(dt, t, camera.position);
+  if (op.hit && playTime - lastWorldShock > 2) {
+    lastWorldShock = playTime;
+    shockAt(innerWidth / 2, innerHeight / 2);
+    takeShock('grate', 4);
+  }
   if (hz.hit && playTime - lastWorldShock > 2) {
     lastWorldShock = playTime;
     shockAt(innerWidth / 2, innerHeight / 2);
@@ -860,6 +888,42 @@ function updateStun() {
   if (note.innerHTML !== html) note.innerHTML = html;
 }
 
+// ---- Rewiring and the outpost --------------------------------------------------------
+const rewire = createRewire($('rewire'), {
+  sound: (kind) => uiSound(kind),
+  onDone: (id) => {
+    const sys = systems.install(id);
+    hudFx.restore(sys);
+    toast(`System restored: ${sys.name}`, { color: '#5CF2D6' });
+    if (systems.integrity >= 1) setTimeout(() => { toast('Every system restored. New visor themes unlocked in Options → Display & help.', { color: '#5CF2D6' }); applyTheme(); }, 3000);
+    save();
+    engage();
+  },
+  onWrong: (x, y) => { shockAt(x, y); takeShock('wire', 3); engage(); },
+  onClose: () => engage(),
+});
+function openRewire() {
+  const next = systems.ready[0];
+  if (!next) { click(); toast("No parts to fit yet. Each system's milestone gets you its part (phone Status shows how)."); return; }
+  setLens(false);
+  if (document.pointerLockElement) document.exitPointerLock();
+  setState('rewire');
+  rewire.open(next, systems.integrity >= 0.5 ? 4 : 3);
+}
+function fitFuses() {
+  if (outpost.powered) { toast('The outpost already has power.'); return; }
+  if (!fusesHeld) { click(); toast(`The console needs ${FUSES_NEEDED - outpost.fitted} more fuse${FUSES_NEEDED - outpost.fitted > 1 ? 's' : ''}. They're somewhere around the outpost.`); return; }
+  const n = fusesHeld;
+  fusesHeld = 0;
+  thunk();
+  if (outpost.fit(n)) {
+    rebootSound();
+    salvage.unlockVault();
+    toast('Power restored! The outpost lights up and its vault doors grind open.', { color: '#5CF2D6' });
+  } else toast(`${outpost.fitted} of ${FUSES_NEEDED} fuses fitted.`, { color: '#ff9a5c' });
+  save();
+}
+
 // ---- Salvage pods (lost phone apps) ---------------------------------------------------
 let pingClock = 0;
 function updateSalvage(dt) {
@@ -871,6 +935,18 @@ function updateSalvage(dt) {
       suit.addCell();
       suit.charge(100);
       toast(`Power cell fitted (${suit.cells} of 2): your visor battery lasts longer, and it's fully charged.`, { color: '#ffc46b' });
+    } else if (got.kind === 'fuse') {
+      fusesHeld++;
+      toast(`Picked up a fuse (${fusesHeld} held). Fit it at the sunken outpost's console with ${keyName('use')}.`, { color: '#ff9a5c' });
+    } else if (got.kind === 'upgrade') {
+      suit.addUpgrade(got.upgrade);
+      toast(`Visor upgrade: ${UPGRADES[got.upgrade].name}. ${UPGRADES[got.upgrade].desc}`, { color: '#f4fbff' });
+    } else if (got.kind === 'log') {
+      const log = LOGS.find((l) => l.id === got.log), n = salvage.count('log');
+      // The fragment plays as a broken line of text (no voice: the recording is too damaged).
+      queue.push({ key: 'log', i: 0, text: `[${log.title}] ${log.text}`, silent: true });
+      lineUntil = 0;
+      toast(n === LOGS.length ? "Echo's memory is whole again. Read it on the phone's Guide tab." : `Echo's log recovered (${n} of ${LOGS.length})`, { color: '#b59cff' });
     } else toast(`Recovered the ${got.name} app (${APPS.filter((a) => salvage.found(a.id)).length} of ${APPS.length})`, { color: '#5CF2D6' });
     tutorial.note('salvage');
     save();
@@ -939,9 +1015,11 @@ function frame() {
     hudFx.text($('scanlabel'), scan.status, 'lens', `<b>${scan.name}</b>`);
     $('scanlabel').classList.toggle('known', scan.done);
   }
-  const near = state === 'playing' && !lensOn ? usable() : null;
-  $('prompt').hidden = !near;
-  if (near) $('prompt').innerHTML = `<kbd>F</kbd>${USE_LABEL[near.id]}${near.id === 'kelpfarm' ? ` (${near.state?.kelp || 0})` : ''}`;
+  const atConsole = state === 'playing' && !lensOn && !outpost.powered && outpost.nearConsole(camera.position);
+  const near = state === 'playing' && !lensOn && !atConsole ? usable() : null;
+  $('prompt').hidden = !near && !atConsole;
+  if (atConsole) $('prompt').innerHTML = `<kbd>${keyName('use')}</kbd>Fit fuses (${fusesHeld} held, ${outpost.fitted} of ${FUSES_NEEDED} fitted)`;
+  else if (near) $('prompt').innerHTML = `<kbd>F</kbd>${USE_LABEL[near.id]}${near.id === 'kelpfarm' ? ` (${near.state?.kelp || 0})` : ''}`;
   const depth = Math.max(0, SURFACE_Y - camera.position.y);
   hudFx.text($('depth'), player.onFoot ? 'On deck' : depth < 0.3 ? 'Surface' : `${depth.toFixed(1)} m`, 'depth');
   updateVisor(dt);
@@ -958,7 +1036,7 @@ function frame() {
 
 
 // ?debug exposes the internals in the console.
-if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, systems, hudFx, salvage, suit, hazards, setSilt: (v) => { silt = v; }, getSilt: () => silt, addLumen: (n) => setLumen(lumen + n) } });
+if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, systems, hudFx, salvage, suit, hazards, outpost, rewire, giveFuses: (n) => { fusesHeld += n; }, setSilt: (v) => { silt = v; }, getSilt: () => silt, addLumen: (n) => setLumen(lumen + n) } });
 
 renderBuildBar();
 load();

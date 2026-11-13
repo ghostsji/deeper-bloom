@@ -222,12 +222,39 @@ try {
       cracks: !!document.querySelector('#visor .v-cracks path'),
       navOff: document.getElementById('compass').classList.contains('offline'),
       vitalsDmg: document.querySelector('.stats').classList.contains('dmg'),
-      ledger: !document.querySelector('.lumen').classList.contains('dmg') && db.systems.online('ledger'),
-      comms: db.systems.online('comms'),
+      ready: db.systems.isReady('ledger') && db.systems.isReady('comms') && !db.systems.online('ledger'),
       pct: document.getElementById('integrity').textContent,
     };`);
   check('the visor starts damaged (cracks, no compass, flickering vitals)', hud.cracks && hud.navOff && hud.vitalsDmg);
-  check('progress restores visor systems', hud.ledger && hud.comms, hud.pct);
+  check('milestones get you the parts to fix systems', hud.ready, hud.pct);
+
+  // Rewiring (V): the right sockets bring a system back; a wrong one shocks you.
+  const wire = await run(`
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const key = (c) => { dispatchEvent(new KeyboardEvent('keydown', { code: c })); dispatchEvent(new KeyboardEvent('keyup', { code: c })); };
+    const P = await import('./src/progress.js');
+    key('KeyV');
+    await sleep(200);
+    const panel = !document.getElementById('rewire').hidden;
+    const first = db.systems.ready[0].id;
+    // Wrong first: pick a wire, then a socket that isn't its symbol.
+    const w0 = document.querySelector('.rw-wire');
+    w0.click();
+    const s0 = P.stat('shocks');
+    [...document.querySelectorAll('.rw-socket')].find((x) => x.dataset.socket !== w0.dataset.sym).click();
+    const zapped = P.stat('shocks') - s0, closed = document.getElementById('rewire').hidden;
+    await sleep(2800); // the stun wears off
+    key('KeyV');
+    await sleep(200);
+    for (const w of [...document.querySelectorAll('.rw-wire')]) {
+      w.click();
+      document.querySelector('.rw-socket[data-socket="' + w.dataset.sym + '"]').click();
+    }
+    await sleep(300);
+    return { panel, zapped, closed, fixed: db.systems.online(first), playing: document.getElementById('rewire').hidden };`);
+  check('V opens the visor panel', wire.panel);
+  check('a wrong socket shocks you and shuts the panel', wire.zapped > 0 && wire.closed);
+  check('wiring every socket right restores the system', wire.fixed && wire.playing);
 
   // The suit: a low battery cuts systems, deep water cracks and floods the visor, and live
   // cables and jellies shock you.
@@ -322,6 +349,32 @@ try {
   check('an electric eel discharges and shocks you', haz2.eelZap > 0, `${haz2.eelZap} shock(s)`);
   check('a power surge makes cables reach much further', haz2.surging && haz2.surgeZap > 0);
   check('silt clouds the water', haz2.fog > 0.12, haz2.fog.toFixed(3));
+
+  // The sunken outpost: fit three fuses and its vault opens (an upgrade, two logs); a log by Echo.
+  const op = await run(`
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    await sleep(2500); // let any stun and phone reboot from the last test pass
+    db.giveFuses(3);
+    db.camera.position.copy(db.outpost.consolePos);
+    await sleep(100);
+    dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyF' }));
+    dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyF' }));
+    await sleep(100);
+    const powered = db.outpost.powered;
+    const plate = db.salvage.remaining().find((p) => p.id === 'up-plate');
+    if (plate) db.camera.position.copy(plate.pos);
+    await sleep(300);
+    const upgraded = db.suit.has('plate');
+    const log = db.salvage.remaining().find((p) => p.id === 'pod-log5');
+    db.camera.position.copy(log.pos);
+    await sleep(300);
+    const logs = db.salvage.count('log');
+    db.camera.position.set(0, 12, 24);
+    await sleep(300);
+    return { powered, vaultOpen: !!plate, upgraded, logs };`);
+  check('fitting three fuses powers the outpost and opens its vault', op.powered && op.vaultOpen);
+  check('a visor upgrade from the vault takes effect', op.upgraded);
+  check("Echo's logs can be found", op.logs >= 1, `${op.logs} log(s)`);
 
   const save = await run(`
     const raw = localStorage.getItem('deeperbloom-save-v1');

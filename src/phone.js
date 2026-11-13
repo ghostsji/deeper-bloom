@@ -49,6 +49,9 @@ const GUIDES = [
   ['Visor battery', () => `Your HUD runs on a battery that drains as you play. At 30% navigation shuts off, then the depth gauge (20%), the Lumen and Data readouts (12%) and your vitals (5%); at 0% Echo's subtitles go too. It recharges fast on a raft deck and slowly while you tread water at the surface, or you can buy ${POWER.lumenCharge}% for ${POWER.lumenCost} Lumen on the Status app. Two power cells lie in salvage pods next to live cables: each makes the battery last longer.`],
   ['Pressure on the glass', () => `Below ${PRESSURE.safeDepth} m, deep water strains your cracked visor. The glass groans, the GLASS STRAIN bar under your depth fills, and new cracks spread across it. When it's full the visor leaks: water fills it from the bottom and you run out of breath much faster. Go shallower to ease it, surface to drain the water, and fix the Visor seal (finish 2 research projects) to stop it for good.`],
   ['Live electricity', () => 'Some jellies carry a charge: they\'re paler, and crackle with little arcs. Broken cables from the flooded outpost lie on the sand with sparking ends. You\'ll hear them crackle as you get close. Touch one and it shocks you like the cracked glass: you lose health, you\'re stunned and sink, and your phone reboots. Sinking stunned next to a cable can shock you again. With the Threat sensor restored they show on the compass.'],
+  ['Rewiring the visor', () => `Each visor system's milestone gets you its part. Then press ${k('rewire')} to open the visor panel and wire it in: each coloured wire goes to the socket with its symbol. The wiring diagram is water-damaged, so each line of it only flickers into view now and then. Wait for it. Plug a wire into the wrong socket and it shocks you (and the panel slams shut).`],
+  ['The sunken outpost', () => `The live cables run back to a flooded research outpost south-west of the reef, deeper than is safe for a cracked visor. Its power is out. Find its three fuses (orange-banded pods: one behind the electric floor grates, one on its roof, one out the back) and fit them at the console outside with ${k('use')}. Cross the grates when their glow goes out. With the power back, the vault opens: a visor upgrade and two of Echo's logs.`],
+  ['Wrecks and upgrades', () => 'Two boats went down in the flood. Each holds a visor upgrade (white-banded pod) and one of Echo\'s logs. Upgrades: the Pressure plate (in the outpost\'s vault) lets you go 5 m deeper before the glass strains, the Spark guard halves shock damage, and the Anti-fog coating halves fogging.'],
   ['Goals and skills', () => 'Every goal (Lumen gathered, scans, fish, distance swum...) has endless tiers. Each tier pays Bloom points, which you spend on the Skills tab. Some skills need another one learned first.'],
   ['Blacking out', () => 'If your health hits zero you black out and wake on your nearest raft. Your bag drops where you fell: swim back to the gold ring to pick it up. Blacking out again before you do loses it.'],
   ['Saving', () => 'The game saves as you play. Save game (on the pause menu or the main menu) also copies it to one of three slots, and Load game brings one back.'],
@@ -162,10 +165,10 @@ export function createPhone(el, g) {
     }).join('');
     const sys = g.systems, pct = Math.round(sys.integrity * 100);
     const sysRows = SYSTEMS.map((x) => {
-      const on = sys.online(x.id), pr = sys.progress(x);
+      const on = sys.online(x.id), pr = sys.progress(x), rdy = sys.isReady(x.id);
       return `<li class="${on ? 'ok' : ''}" data-tip="${esc(on ? `${x.name}: back online.` : `<b>${x.name}</b>: damaged. ${x.fault}.<br>Fix: ${x.how}.`)}">
         <span class="tick">${on ? '✓' : '!'}</span><div><b>${x.name}</b>
-        <p>${on ? 'Online' : `${x.how}${pr.need > 1 ? ` <small>${pr.have} / ${pr.need}</small>` : ''}`}</p></div></li>`;
+        <p>${on ? 'Online' : rdy ? `<span class="gold">Part ready: press ${keyName('rewire')} to rewire it</span>` : `${x.how}${pr.need > 1 ? ` <small>${pr.have} / ${pr.need}</small>` : ''}`}</p></div></li>`;
     }).join('');
     const su = g.suit, pw = Math.round(su.power);
     const battery = `<div class="pcard" data-tip="${esc(`Runs your HUD. As it drains, navigation, then the depth gauge, readouts and vitals shut off. Recharges on a raft deck (fast) or at the surface (slowly). Power cells from salvage pods make it last longer.`)}">
@@ -226,6 +229,12 @@ export function createPhone(el, g) {
         <ol class="tutlist">${steps}</ol>
         <div class="row">${ctl}</div>
       </div>
+      ${(() => {
+        const found = g.logs();
+        return `<div class="label pad">Echo's logs <small class="muted">${found.length} / 6</small></div>
+          <div class="plist">${found.length ? found.map((l) => `<div class="pcard"><b>${l.title}</b><p>${l.text}</p></div>`).join('') : '<p class="sub">Corrupted fragments of Echo\'s memory lie in violet-banded salvage pods around the reef.</p>'}
+          ${found.length === 6 ? `<div class="pcard done"><b>Echo's memory</b><p>${g.fullMemory}</p></div>` : ''}</div>`;
+      })()}
       <div class="label pad">How to</div>
       <div class="plist">${GUIDES.map(([title, text], i) => `<details class="pcard guide"${i === 1 ? ' open' : ''}><summary><b>${title}</b></summary><p>${text()}</p></details>`).join('')}</div>`;
   }

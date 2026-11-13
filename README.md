@@ -48,6 +48,18 @@ The HUD is your dive visor, and the flood damaged it: cracked glass, static, fli
 
 Logic in `src/suit.js` (unit tested), hazards in `src/hazards.js`.
 
+## More suit trouble, hazards and the outpost
+
+- **Running out of air** breaks the HUD down: tunnel vision, the cracks pulse red, readouts drop out, Echo's subtitles scramble, and near the end you see things that aren't there.
+- **Fog**: cold deep water and heavy breathing fog the visor; hold **G** to purge it (a little battery). **Heat**: dashing and charging warm the suit (TEMP); overheat and the visor whites out and the battery drains twice as fast until the water cools you.
+- **A wet phone** (after a shock or a leak): taps sometimes land on the wrong button, apps crash back to Build. Dry it at a cook fire.
+- **Electric eels** (blue spots) charge up and discharge a ring out to 7 m. **Power surges** run down the cables every 40-80 s: the ends reach three times as far and nearby pods are cut off. **Silt** stirred up along the bottom clouds the water, jitters the compass and stops the lens locking on.
+- **Rewiring**: a system's milestone now gets you its *part*; press **V** to open the visor panel and wire it in (each colour to its symbol, from a flickering, water-damaged diagram). A wrong socket shocks you.
+- **The sunken outpost** (south-west, below the safe depth): find its three fuses (orange pods: behind the live floor grates, on the roof, out the back), fit them at the console with F, and the vault opens: the Pressure plate upgrade and two of Echo's logs.
+- **Wrecks**: two sunken boats, each with a visor upgrade (Spark guard: half shock damage; Anti-fog coating: half fogging) and a log.
+- **Echo's logs**: six violet pods; each plays a broken fragment, and the full set restores her memory of the flood (phone Guide).
+- **Visor themes** unlock at SYS 100% (Options → Display & help).
+
 ## Lost phone apps
 
 The flood washed the Codex, Status, Goals and Skills apps out of your phone: their tabs show as Missing (with a last-signal hint) until you find them. Each module lies on the reef in a salvage pod: a blinking capsule under a thin beam of light with a bright core, a sonar ring pulsing across the sand, and a ping that gets faster and louder as you close in (within about 30 m). Skills is in a far kelp patch where eels nest. Once Navigation is restored, pods show on the compass. Swim into a pod to put its app back. Build, Research and Guide are never lost. See `src/salvage.js`.

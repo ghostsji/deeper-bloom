@@ -1,5 +1,6 @@
-// Your dive visor came through the flood damaged. Each HUD system comes back online when you
-// reach a milestone, and stays restored. Damaged systems glitch, scramble or stay dark (see
+// Your dive visor came through the flood damaged. Reaching a system's milestone gets you the
+// part to fix it ("ready"); you then rewire it yourself on the visor panel (V) to bring it
+// back online, where it stays. Damaged systems glitch, scramble or stay dark (see
 // hud-fx.js); the phone's Status tab lists them with how to fix each one.
 //
 // check(c) reads c: { stat(id) lifetime stats (progress.js), codex(id) scans of a species,
@@ -24,19 +25,35 @@ export const SYSTEMS = [
 ];
 
 export function createSystems(ctx) {
-  let restored = new Set();
+  let restored = new Set(), ready = new Set();
   return {
-    /** Restores anything whose milestone is met. Returns the systems restored just now. */
+    /** Marks systems whose milestone is met as ready to rewire. Returns the ones that just became ready. */
     update() {
-      const now = SYSTEMS.filter((s) => !restored.has(s.id) && s.have(ctx) >= s.need);
-      for (const s of now) restored.add(s.id);
+      const now = SYSTEMS.filter((s) => !restored.has(s.id) && !ready.has(s.id) && s.have(ctx) >= s.need);
+      for (const s of now) ready.add(s.id);
       return now;
     },
+    /** Rewired: a ready system comes back online. Returns it (or null if it wasn't ready). */
+    install(id) {
+      if (!ready.has(id)) return null;
+      ready.delete(id);
+      restored.add(id);
+      return SYSTEMS.find((s) => s.id === id);
+    },
     online: (id) => restored.has(id),
+    isReady: (id) => ready.has(id),
+    /** Systems with their part in hand, waiting to be rewired. */
+    get ready() { return SYSTEMS.filter((s) => ready.has(s.id)); },
     /** 0 (everything damaged) to 1 (fully restored). */
     get integrity() { return restored.size / SYSTEMS.length; },
     progress: (s) => ({ have: Math.min(Math.floor(s.have(ctx)), s.need), need: s.need }),
-    serialize: () => [...restored],
-    load(list) { restored = new Set((list || []).filter((id) => SYSTEMS.some((s) => s.id === id))); },
+    serialize: () => ({ restored: [...restored], ready: [...ready] }),
+    // Older saves stored just the restored list.
+    load(d) {
+      const ok = (id) => SYSTEMS.some((s) => s.id === id);
+      const r = Array.isArray(d) ? d : d?.restored || [];
+      restored = new Set(r.filter(ok));
+      ready = new Set((Array.isArray(d) ? [] : d?.ready || []).filter((id) => ok(id) && !restored.has(id)));
+    },
   };
 }

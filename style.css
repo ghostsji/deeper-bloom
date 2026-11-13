@@ -518,3 +518,28 @@ body[data-theme="amber"] { --cyan: #FFB347; --hud-line: rgba(255, 179, 71, .4); 
 body[data-theme="white"] { --cyan: #EAF6F6; --hud-line: rgba(234, 246, 246, .4); }
 body[data-theme="bloom"] { --cyan: #FF8FD0; --hud-line: rgba(255, 143, 208, .4); }
 body[data-theme="green"] { --cyan: #7CFF8A; --hud-line: rgba(124, 255, 138, .38); }
+
+/* ---- The rewiring panel ---- */
+.rewire-card { width: min(620px, calc(100vw - 32px)); box-sizing: border-box; text-align: center; }
+.rw-legend { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; margin: 8px 0 16px; padding: 10px; border: 1px dashed var(--line); border-radius: 10px; background: repeating-linear-gradient(0deg, rgba(255, 255, 255, .03) 0 2px, transparent 2px 4px); font: 16px var(--mono); }
+.rw-legend span { display: inline-flex; align-items: center; gap: 6px; animation: rwflick 3.4s infinite steps(1); animation-delay: var(--d); }
+.rw-legend i { width: 14px; height: 14px; border-radius: 3px; }
+.rw-legend b { color: var(--text); font-size: 18px; }
+@keyframes rwflick { 0%, 62% { opacity: 0; } 63%, 100% { opacity: 1; } }
+.rw-board { position: relative; display: flex; justify-content: space-between; padding: 6px 40px; }
+.rw-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.rw-lines path { fill: none; stroke-width: 4; stroke-linecap: round; filter: drop-shadow(0 0 4px currentColor); }
+.rw-col { display: flex; flex-direction: column; gap: 12px; z-index: 1; }
+.rw-wire, .rw-socket { min-width: 96px; padding: 10px 14px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--deep); color: var(--text); font: 600 14px var(--mono); letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
+.rw-wire { border-left: 8px solid var(--c); }
+.rw-wire.picked { border-color: var(--c); box-shadow: 0 0 14px var(--c); }
+.rw-socket { font-size: 20px; }
+.rw-wire:hover:not(:disabled), .rw-socket:hover:not(:disabled) { border-color: var(--cyan); }
+.rw-wire:disabled, .rw-socket:disabled { opacity: .45; cursor: default; }
+.integrity em { font-style: normal; color: var(--gold); animation: flick 1.2s infinite steps(1); }
+
+/* ---- Compass: more kinds of pod, and the outpost ---- */
+.compass .mark.log { width: 8px; height: 8px; border-radius: 50%; background: #b59cff; box-shadow: 0 0 8px #b59cff; }
+.compass .mark.fuse { width: 7px; height: 9px; background: #ff9a5c; box-shadow: 0 0 8px #ff9a5c; }
+.compass .mark.upgrade { width: 8px; height: 8px; border: 2px solid #f4fbff; transform-origin: center; rotate: 45deg; }
+.compass .mark.outpost { width: 10px; height: 8px; background: none; border: 2px solid #ff9a5c; border-top-width: 4px; }

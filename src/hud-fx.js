@@ -158,7 +158,8 @@ export function createHudFx(root, systems) {
     visor.classList.toggle('sealed', systems.online('visor')); // fixed glass can't shock you
     visor.style.setProperty('--crack', systems.online('visor') ? 0 : Math.max(0.25, 0.75 - systems.integrity * 0.5));
     const pct = Math.round(systems.integrity * 100);
-    integrityEl.innerHTML = `<span>SYS</span><i style="--v:${systems.integrity}"></i><b>${pct}%</b>`;
+    const nReady = systems.ready.length;
+    integrityEl.innerHTML = `<span>SYS</span><i style="--v:${systems.integrity}"></i><b>${pct}%${nReady ? ` <em>+${nReady} V</em>` : ''}</b>`;
     integrityEl.classList.toggle('full', pct === 100);
   }
 
