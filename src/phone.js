@@ -252,6 +252,7 @@ export function createPhone(el, g) {
 
   function render() {
     el.style.setProperty('--crack', g.systems.online('visor') ? 0 : Math.max(0.15, 0.6 - g.systems.integrity * 0.5));
+    el.classList.toggle('sealed', g.systems.online('visor')); // fixed glass can't shock you
     el.querySelector('[data-lumen]').textContent = g.lumen().toLocaleString();
     el.querySelector('[data-data]').textContent = `${g.research.data} Data`;
     el.querySelector('[data-bloom]').textContent = `${progress.points()} Bloom`;

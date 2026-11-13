@@ -468,3 +468,23 @@ export function salvagePing(closeness) {
   voice(f, t, 0.9, { gain: 0.02 + closeness * 0.05, out: sfx, echo: 0.6, attack: 0.005 });
   voice(f * 1.5, t + 0.02, 0.5, { gain: 0.01 + closeness * 0.02, out: sfx, attack: 0.005 });
 }
+
+// Touching cracked glass: a sharp snap, a stuttering electrical buzz and a falling spark.
+export function zapSound() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  crackle(t, 0.03, { freq: 5000, q: 1, gain: 0.25, chop: 1 });
+  crackle(t + 0.01, 0.4, { freq: 2800, q: 0.6, gain: 0.12, chop: 0.006 });
+  // Buzz: a saw whose pitch is shaken by a fast square wave.
+  const o = ctx.createOscillator(), lfo = ctx.createOscillator(), lfoG = ctx.createGain(), bp = ctx.createBiquadFilter(), g = ctx.createGain();
+  o.type = 'sawtooth'; o.frequency.value = 110;
+  lfo.type = 'square'; lfo.frequency.value = 34; lfoG.gain.value = 60;
+  lfo.connect(lfoG); lfoG.connect(o.frequency);
+  bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.7;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.09, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.38);
+  o.connect(bp); bp.connect(g); g.connect(visor);
+  o.start(t); lfo.start(t); o.stop(t + 0.4); lfo.stop(t + 0.4);
+  beep(t, 2400, 180, 0.22, { type: 'sine', gain: 0.05 });
+}

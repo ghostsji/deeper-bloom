@@ -19,6 +19,7 @@ import { createTutorial, STEPS } from './tutorial.js';
 import { createSystems } from './hud-systems.js';
 import { createHudFx } from './hud-fx.js';
 import { createSalvage, APPS } from './salvage.js';
+import { onShock } from './shock.js';
 import { setTooltips } from './tooltips.js';
 import { keyName } from './controls.js';
 import { initAudio, updateAudio, setMusic, uiSound, pop, chime, thunk, salvagePing, rebootSound, setPaused, gasp, heartbeat, warn, munch, sizzle, grab, harpoonFire, thud, hiss, bite, release, click } from './audio.js';
@@ -716,6 +717,17 @@ function updateVisor(dt) {
   if (systems.online('sensor')) for (const e of combat.eelPositions()) if (e.distanceTo(p) < 45) points.push({ ...point('eel', e), dist: null });
   hudFx.update(dt, t, { heading: Math.atan2(_dir.x, -_dir.z), points, playing: state === 'playing' });
 }
+
+// ---- Touching the cracks --------------------------------------------------------------
+// The broken glass is live: touching a crack (visor or phone) shocks you for a little health.
+let shocked = 0;
+onShock(({ where }) => {
+  if (state !== 'playing' && state !== 'phone') return;
+  survival.damage(3);
+  hurtFlash();
+  progress.track('shocks');
+  if (shocked++ < 2) toast(where === 'phone' ? "Zap! The phone's cracked screen is live. Keep your fingers off the cracks." : "Zap! The cracked visor is live. Don't touch the cracks.", { color: '#9fe8ff' });
+});
 
 // ---- Salvage pods (lost phone apps) ---------------------------------------------------
 let pingClock = 0;

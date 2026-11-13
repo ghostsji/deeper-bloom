@@ -9,26 +9,58 @@ import { glitchSound, staticSound, rebootSound, setVisorHum } from './audio.js';
 const GLYPHS = '░▒▓#%&@$<>/\\|=+*¤§';
 const scramble = (s, p) => s.replace(/\S/g, (ch) => (Math.random() < p ? GLYPHS[(Math.random() * GLYPHS.length) | 0] : ch));
 
-// Branching crack lines from a few impact points, the same every time (seeded).
-function cracks(w, h, seed) {
+// Shattered glass, the same every time (seeded): at each impact point a crushed core of shards,
+// jagged rings of stress fractures, and long branching cracks. Every crack is drawn as a dark
+// shadow plus a bright edge (so the glass has depth), with glints where light catches it. The
+// crack lines are repeated as wide invisible "hit" strokes, so touching them can shock you.
+function cracks(w, h, seed, impacts = [[0.86, 0.16, 7], [0.1, 0.78, 5], [0.62, 0.9, 3]]) {
   let r = seed;
   const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647);
-  const paths = [];
+  const f = (v) => v.toFixed(1);
+  const lines = [], shards = [], glints = [], rings = [];
   const branch = (x, y, ang, len, depth) => {
-    let d = `M${x.toFixed(1)} ${y.toFixed(1)}`;
+    let d = `M${f(x)} ${f(y)}`;
     for (let i = 0; i < 6; i++) {
       ang += (rnd() - 0.5) * 0.7;
       x += Math.cos(ang) * len / 6; y += Math.sin(ang) * len / 6;
-      d += ` L${x.toFixed(1)} ${y.toFixed(1)}`;
-      if (depth < 2 && rnd() < 0.3) branch(x, y, ang + (rnd() < 0.5 ? -1 : 1) * (0.5 + rnd() * 0.6), len * 0.45, depth + 1);
+      d += ` L${f(x)} ${f(y)}`;
+      if (rnd() < 0.18) glints.push([x, y, 1 + rnd() * 2.5]);
+      if (depth < 2 && rnd() < 0.32) branch(x, y, ang + (rnd() < 0.5 ? -1 : 1) * (0.5 + rnd() * 0.6), len * 0.45, depth + 1);
     }
-    paths.push(`<path d="${d}" stroke-width="${(2.2 - depth * 0.7).toFixed(1)}"/>`);
+    lines.push([d, 2.4 - depth * 0.75]);
   };
-  for (const [cx, cy, n] of [[w * 0.86, h * 0.16, 7], [w * 0.1, h * 0.78, 5], [w * 0.62, h * 0.9, 3]]) {
-    paths.push(`<circle cx="${cx}" cy="${cy}" r="${6 + n}" fill="rgba(200,240,240,.08)" stroke-width="1"/>`);
+  for (const [fx, fy, n] of impacts) {
+    const cx = w * fx, cy = h * fy, size = Math.min(w, h) * (0.015 + n * 0.004);
+    // The crushed core: little triangles of frosted glass.
+    for (let i = 0; i < 10 + n * 2; i++) {
+      const a = rnd() * Math.PI * 2, d = rnd() * size, s2 = size * (0.25 + rnd() * 0.5);
+      const x = cx + Math.cos(a) * d, y = cy + Math.sin(a) * d;
+      const pts = [0, 1, 2].map((k) => { const b = a + k * 2.1 + rnd() * 0.8; return `${f(x + Math.cos(b) * s2)},${f(y + Math.sin(b) * s2)}`; }).join(' ');
+      shards.push(`<polygon points="${pts}" fill="rgba(225,250,248,${(0.05 + rnd() * 0.16).toFixed(2)})" stroke="rgba(235,255,252,.5)" stroke-width=".6"/>`);
+    }
+    // Stress rings: jagged, broken loops around the impact.
+    for (const k of [1.8, 3.4, 5.6].slice(0, n > 4 ? 3 : 2)) {
+      const rad = size * k;
+      let d = '', on = false;
+      for (let i = 0; i <= 28; i++) {
+        const a = (i / 28) * Math.PI * 2, rr = rad * (0.85 + rnd() * 0.3);
+        if (rnd() < 0.22) { on = false; continue; } // gaps: the ring is broken
+        d += `${on ? 'L' : 'M'}${f(cx + Math.cos(a) * rr)} ${f(cy + Math.sin(a) * rr)} `;
+        on = true;
+      }
+      rings.push([d, 1.1]);
+    }
     for (let i = 0; i < n; i++) branch(cx, cy, (i / n) * Math.PI * 2 + rnd(), (0.18 + rnd() * 0.22) * w, 0);
   }
-  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" fill="none" stroke="rgba(214,246,244,.55)" stroke-linecap="round" stroke-linejoin="round">${paths.join('')}</svg>`;
+  const all = [...lines, ...rings];
+  const draw = (stroke, dx, extra = 0) => all.map(([d, sw]) => `<path d="${d}" stroke="${stroke}" stroke-width="${f(sw + extra)}"${dx ? ` transform="translate(${dx} ${dx})"` : ''}/>`).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <g class="crack-shadow">${draw('rgba(0,10,14,.45)', 1.2, 0.8)}</g>
+    <g class="crack-edge">${draw('rgba(214,246,244,.6)', 0)}</g>
+    <g class="crack-shards">${shards.join('')}</g>
+    <g class="crack-glints">${glints.map(([x, y, s2]) => `<path d="M${f(x - s2 * 2)} ${f(y)}H${f(x + s2 * 2)}M${f(x)} ${f(y - s2 * 2)}V${f(y + s2 * 2)}" stroke="#fff" stroke-width=".8" style="--d:${(rnd() * 4).toFixed(2)}s"/>`).join('')}</g>
+    <g class="crack-hit">${lines.map(([d]) => `<path d="${d}"/>`).join('')}${impacts.map(([fx, fy, n]) => `<circle cx="${f(w * fx)}" cy="${f(h * fy)}" r="${f(Math.min(w, h) * (0.015 + n * 0.004) * 2)}"/>`).join('')}</g>
+  </svg>`;
 }
 export const crackSvg = cracks;
 
@@ -38,7 +70,12 @@ const PARTS = { vitals: ['.stats'], comms: ['#subtitle'], ledger: ['.lumen', '.d
 export function createHudFx(root, systems) {
   const $ = (q) => root.querySelector(q);
   const visor = $('#visor');
-  visor.innerHTML = `<div class="v-cracks">${cracks(1600, 900, 7)}</div><div class="v-scan"></div><div class="v-static"></div>
+  visor.innerHTML = `<div class="v-cracks">
+      <div class="v-bleed b1"></div><div class="v-bleed b2"></div><div class="v-bleed b3"></div>
+      <div class="v-band"></div><div class="v-deadpx"></div>
+      <div class="v-water"><svg viewBox="0 0 1600 60" preserveAspectRatio="none"><path d="M0 30 Q100 10 200 30 T400 30 T600 30 T800 30 T1000 30 T1200 30 T1400 30 T1600 30 V60 H0Z"/></svg>
+        ${Array.from({ length: 7 }, (_, i) => `<i class="drop" style="left:${8 + i * 13 + (i % 3) * 3}%;--d:${(i * 1.7) % 6}s;--t:${4 + (i % 4)}s"></i>`).join('')}</div>
+      ${cracks(1600, 900, 7)}</div><div class="v-scan"></div><div class="v-static"></div>
     <i class="v-corner tl"></i><i class="v-corner tr"></i><i class="v-corner bl"></i><i class="v-corner br"></i><div class="v-flash"></div>`;
   const integrityEl = $('#integrity');
 
@@ -108,6 +145,7 @@ export function createHudFx(root, systems) {
   function setParts() {
     for (const s of SYSTEMS) for (const q of PARTS[s.id]) root.querySelectorAll(q).forEach((el) => el.classList.toggle('dmg', !systems.online(s.id)));
     compass.classList.toggle('offline', !systems.online('nav'));
+    visor.classList.toggle('sealed', systems.online('visor')); // fixed glass can't shock you
     visor.style.setProperty('--crack', systems.online('visor') ? 0 : Math.max(0.25, 0.75 - systems.integrity * 0.5));
     const pct = Math.round(systems.integrity * 100);
     integrityEl.innerHTML = `<span>SYS</span><i style="--v:${systems.integrity}"></i><b>${pct}%</b>`;

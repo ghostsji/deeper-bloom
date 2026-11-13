@@ -143,6 +143,32 @@ try {
   check('swimming into a salvage pod recovers its app', apps.found && !apps.missing1.includes('codex') && apps.missing1.length === 3 && apps.saved?.includes('codex'), apps.missing1.join());
   check('a missing app shows where to look', apps.page === 'Skills');
 
+  // Touching cracked glass shocks you (a little health, a lightning burst), on the visor and the phone.
+  const shock = await run(`
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const touch = (path) => {
+      const pt = path.getPointAtLength(path.getTotalLength() / 2).matrixTransform(path.getScreenCTM());
+      path.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX: pt.x, clientY: pt.y }));
+    };
+    const health = () => db.survival.stats.health;
+    const h0 = health();
+    touch(document.querySelector('#visor .crack-hit path'));
+    const zap = !!document.querySelector('.zap');
+    await sleep(600);
+    const h1 = health();
+    dispatchEvent(new KeyboardEvent('keydown', { code: 'Tab' }));
+    dispatchEvent(new KeyboardEvent('keyup', { code: 'Tab' }));
+    await sleep(300);
+    touch(document.querySelector('#phone .crack-hit path'));
+    await sleep(100);
+    const h2 = health();
+    dispatchEvent(new KeyboardEvent('keydown', { code: 'Tab' }));
+    dispatchEvent(new KeyboardEvent('keyup', { code: 'Tab' }));
+    await sleep(200);
+    return { zap, visor: h0 - h1, phone: h1 - h2 };`);
+  check('touching a cracked visor shocks you', shock.zap && shock.visor > 0, `-${shock.visor} health`);
+  check('touching the cracked phone screen shocks you', shock.phone > 0, `-${shock.phone} health`);
+
   const scan = await run(`
     db.camera.position.set(0, 2.6, 6);
     const before = db.research.data;
