@@ -115,6 +115,12 @@ export function drawMap(canvas, reveal, view) {
   const [sx, sy] = [(cx - span / 2 + R) * tScale, (cz - span / 2 + R) * tScale];
   g.imageSmoothingEnabled = true;
   g.drawImage(t, sx, sy, span * tScale, span * tScale, 0, 0, size, size);
+  // Reef restoration: dead patches grey, part-planted amber, restored green.
+  for (const c of view.reef || []) {
+    const [px, py] = toPx(c.x - c.size / 2, c.z - c.size / 2), w = c.size * scale;
+    g.fillStyle = c.stage >= 3 ? 'rgba(90, 255, 160, 0.30)' : c.stage ? 'rgba(255, 196, 107, 0.26)' : 'rgba(170, 165, 150, 0.30)';
+    g.fillRect(px, py, w, w);
+  }
   // Corrupted regions: the map draws the seabed from somewhere else there, tinted wrong.
   for (const b of view.corrupt || []) {
     const [px, py] = toPx(b.x, b.z), rr = b.r * scale;

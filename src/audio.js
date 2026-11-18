@@ -597,3 +597,11 @@ export function giantCall() {
   voice(48, t, 4, { type: 'sawtooth', gain: 0.05, out: sfx, echo: 1, attack: 1.2 });
   voice(36, t + 0.6, 4, { type: 'sine', gain: 0.08, out: sfx, echo: 0.6, attack: 1.4 });
 }
+
+// Thunder: a crack, then a long low rumble (quieter and later the further away the strike).
+export function thunder(distance = 30) {
+  if (!ctx) return;
+  const t = ctx.currentTime + Math.min(3, distance / 120), k = Math.max(0.25, 1 - distance / 120);
+  noise(t, 0.12, { freq: 1800, q: 0.4, gain: 0.35 * k, attack: 0.005 });
+  noise(t + 0.05, 3, { freq: 90, q: 0.6, type: 'lowpass', gain: 0.5 * k, attack: 0.1 });
+}

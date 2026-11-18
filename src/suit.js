@@ -125,7 +125,8 @@ export function createSuit() {
       if (s.surfaced || s.onDeck) fog = Math.max(0, fog - FOG.clear * dt);
       else fog = Math.min(1, fog + fogRate * (upgrades.has('coating') ? 0.5 : 1) * dt);
       // Blight spreads once it has a hold (half as fast with a filter).
-      if (blight > 0) blight = Math.min(1, blight + BLIGHT.spread * (filter ? 0.5 : 1) * dt);
+      // In a patch of reef you've restored, the blight on your visor recedes instead.
+      if (blight > 0) blight = s.inRestored ? Math.max(0, blight - 0.01 * dt) : Math.min(1, blight + BLIGHT.spread * (filter ? 0.5 : 1) * dt);
       // Ears: dropping fast builds pressure; equalising (or easing off) lets it out.
       const sink = s.sinkSpeed ?? 0;
       if (!s.surfaced && sink > EARS.safeSink) ears = Math.min(1, ears + (sink - EARS.safeSink) * EARS.rate * dt);
@@ -139,7 +140,8 @@ export function createSuit() {
       if (leak > 0.2) phoneWet = Math.max(phoneWet, 0.8);
       // Battery.
       const drain = POWER.drain * Math.max(0.1, 1 - cells * POWER.cellSaving) * (heat > HEAT.hot ? 2 : 1);
-      const gain = s.onDeck ? POWER.deck : s.surfaced ? POWER.surface : 0;
+      // Rain cuts the solar charging (by up to 80% in a full storm).
+      const gain = (s.onDeck ? POWER.deck : s.surfaced ? POWER.surface : 0) * (1 - (s.storm || 0) * 0.8);
       power = Math.max(0, Math.min(100, power + (gain - (gain ? 0 : drain)) * dt));
       for (const w of LOW_WARNINGS) {
         if (power <= w && !warned.has(w)) { warned.add(w); ev.warn = w; }

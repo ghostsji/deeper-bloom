@@ -35,6 +35,7 @@ export function createPlayer(camera, canvas) {
   let onFoot = false, grounded = false;
   let stun = 0, stunMax = 1; // seconds left stunned: no control, and you sink
   let dashing = false;       // holding dash while moving (heats the suit)
+  let swell = 0;             // storm swell at the surface (0..1)
   let deckAt = () => null; // (x, z) => deck surface height, or null over open water
   // Fallback for when pointer lock isn't available: the free cursor looks around, and
   // resting it near a screen edge keeps turning that way.
@@ -121,7 +122,9 @@ export function createPlayer(camera, canvas) {
     const floor = floorY(p.x, p.z) + SWIM.eye;
     if (p.y < floor) { p.y = floor; if (vel.y < 0) vel.y = 0; }
     // Treading water: your head breaks the surface and bobs with the swell.
-    const top = SURFACE_Y + SWIM.float + Math.sin(t * 1.3) * 0.07;
+    // At the surface you tread water (the swell grows in a storm); where a low tide has
+    // uncovered the seabed you just rest on it.
+    const top = Math.max(floor, SURFACE_Y + SWIM.float + Math.sin(t * 1.3) * (0.07 + swell * 0.45));
     if (p.y > top) { p.y = top; if (vel.y > 0) vel.y = 0; }
     // Swim up against a raft and you haul yourself onto it.
     const deck = deckAt(p.x, p.z);
@@ -167,6 +170,7 @@ export function createPlayer(camera, canvas) {
     setStun(secs) { stun = Math.max(stun, secs); stunMax = Math.max(stun, 0.01); vel.multiplyScalar(0.3); },
     get stunned() { return stun > 0; },
     get dashing() { return dashing; },
+    setSwell(v) { swell = v; },
     /** Currents, sinkholes and vents: an acceleration on you this frame (not on a deck). */
     push(a, dt) { if (!onFoot) vel.addScaledVector(a, dt); },
     get stunLeft() { return stun; },

@@ -27,7 +27,7 @@ test('the open seabed has deep trenches and shallow banks, all underwater', () =
   const ys = sample();
   assert.ok(Math.min(...ys) < -15, `deepest ${Math.min(...ys)}`);
   assert.ok(Math.max(...ys) > 10, `shallowest ${Math.max(...ys)}`);
-  assert.ok(ys.every((y) => y >= DEEPEST && y <= SURFACE_Y - 3));
+  assert.ok(ys.every((y) => y >= DEEPEST && y <= SURFACE_Y - 1)); // banks top out a metre below mean sea level
 });
 
 test('the atoll walls rise out of the water at the edge', () => {

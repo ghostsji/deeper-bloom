@@ -600,3 +600,10 @@ body[data-theme="green"] { --cyan: #7CFF8A; --hud-line: rgba(124, 255, 138, .38)
 .sonarmarks .sm.eel, .sonarmarks .sm.angler { color: #ff5c6c; border-color: #ff5c6c; box-shadow: 0 0 8px #ff3050; }
 .sonarmarks .sm.jelly { color: #ff8fd0; border-color: #ff8fd0; }
 .sonarmarks .sm.abyss { color: #b59cff; border-color: #b59cff; box-shadow: 0 0 10px #9a6bff; }
+
+/* ---- Lightning ---- */
+.lightning { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at 50% 0%, rgba(240, 250, 255, .95), rgba(200, 225, 255, .5) 60%, rgba(160, 200, 255, .3)); }
+.lightning.go { animation: lightning .4s steps(4); }
+.lightning.dim { animation: lightdim .4s steps(3); }
+@keyframes lightning { 0% { opacity: .9; } 25% { opacity: .2; } 50% { opacity: .75; } 100% { opacity: 0; } }
+@keyframes lightdim { 0% { opacity: .25; } 50% { opacity: .08; } 100% { opacity: 0; } }

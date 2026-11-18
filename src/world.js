@@ -2,7 +2,12 @@ import * as THREE from 'three';
 import { perk } from './progress.js';
 
 // ---- The Shallows: tune here --------------------------------------------------
-export const SURFACE_Y = 26;
+// The water level. SEA_LEVEL is mean sea level (the seabed is shaped around it); SURFACE_Y is
+// where the water actually is right now: the tide moves it (setWaterLevel). Modules import
+// SURFACE_Y as a live binding, so they always read the current level.
+export const SEA_LEVEL = 26;
+export let SURFACE_Y = SEA_LEVEL;
+export function setWaterLevel(tide) { SURFACE_Y = SEA_LEVEL + tide; }
 export const WORLD_RADIUS = 420;   // the atoll's walls rise past this (it was 105)
 export const REEF_RADIUS = 70;     // the familiar reef round Echo; procedural seabed beyond
 const FOG = 0x0a3a46;
@@ -68,10 +73,11 @@ export function floorY(x, z) {
   open -= smooth(0.8, 0.96, ridge) * 28;
   open += smooth(0.45, 0.8, noise(x / 95 + 17, z / 95 + 61)) * 20;
   const blend = smooth(REEF_RADIUS - 15, REEF_RADIUS + 45, r);
-  const y = Math.min(SURFACE_Y - 3, Math.max(DEEPEST, reef * (1 - blend) + open * blend));
+  // The highest banks reach a metre below mean sea level, so a low tide uncovers them as islands.
+  const y = Math.min(SEA_LEVEL - 1, Math.max(DEEPEST, reef * (1 - blend) + open * blend));
   // The atoll's wall: whatever the seabed does near the edge, it rises out of the water.
   const wall = smooth(WORLD_RADIUS - 45, WORLD_RADIUS - 8, r);
-  return y + (SURFACE_Y + 4 - y) * wall;
+  return y + (SEA_LEVEL + 4 - y) * wall;
 }
 
 // Scatter helper: a point uniformly over a ring of the world, retried until accept(x, z, y).
@@ -120,6 +126,8 @@ export function buildWorld(scene) {
   let silt = 0;
   // Night (0 day .. 1 night): the light drops and the water goes near black.
   let night = 0, sonar = 0; // a sonar ping thins the fog for a moment
+  let storm = 0, flash = 0;  // storm strength, and a lightning flash fading out
+  const rain = addRain(scene), bolts = [];
   const nightWater = new THREE.Color(0x02090d), nightAir = new THREE.Color(0x04060f);
   const siltFog = new THREE.Color(0x3b3a2a);
 
@@ -133,18 +141,39 @@ export function buildWorld(scene) {
     setSilt(v) { silt = v; },
     setNight(v) { night = v; },
     setSonar(v) { sonar = v; },
+    setStorm(v) { storm = v; },
+    /** A lightning strike down to the water at (x, z): a bolt and a flash. */
+    strike(x, z) {
+      const pts = [];
+      let px = x + (Math.random() - 0.5) * 20, pz = z + (Math.random() - 0.5) * 20;
+      for (let y = SURFACE_Y + 90; y > SURFACE_Y; y -= 6) {
+        pts.push(new THREE.Vector3(px, y, pz));
+        px += (x - px) * 0.25 + (Math.random() - 0.5) * 4; pz += (z - pz) * 0.25 + (Math.random() - 0.5) * 4;
+      }
+      pts.push(new THREE.Vector3(x, SURFACE_Y, z));
+      const bolt = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xf2fbff, fog: false }));
+      scene.add(bolt);
+      bolts.push({ bolt, life: 0.25 });
+      flash = 1;
+    },
     update(dt, t, camera, playerSpeed = 0) {
       time.value = t;
-      hemi.intensity = (0.9 + bloom * 0.7) * (1 - night * 0.72);
-      sun.intensity = 1.4 * (1 - night * 0.9);
+      hemi.intensity = (0.9 + bloom * 0.7) * (1 - night * 0.72) * (1 - storm * 0.35) + flash * 4;
+      sun.intensity = 1.4 * (1 - night * 0.9) * (1 - storm * 0.6);
+      flash = Math.max(0, flash - dt * 4);
+      for (let i = bolts.length - 1; i >= 0; i--) if ((bolts[i].life -= dt) <= 0) { scene.remove(bolts[i].bolt); bolts.splice(i, 1); }
+      // The water moves with the tide.
+      surface.under.position.y = surface.top.position.y = SURFACE_Y;
+      rays.position.y = SURFACE_Y - SEA_LEVEL;
       // Above the water it's a clear night over the atoll; below, the glowing murk.
       const above = camera.position.y > SURFACE_Y;
       scene.fog.color.copy(above ? airFog : waterFog).lerp(above ? nightAir : nightWater, night * 0.8);
       scene.background.copy(scene.fog.color);
-      scene.fog.density = (above ? 0.009 : 0.03 - bloom * 0.008 + silt * 0.16) * (1 - sonar * 0.6);
+      scene.fog.density = (above ? 0.009 + storm * 0.016 : 0.03 - bloom * 0.008 + silt * 0.16 + storm * 0.004) * (1 - sonar * 0.6);
+      rain.update(dt, camera, above && storm > 0.15, storm);
       if (!above && silt > 0) { scene.fog.color.lerp(siltFog, silt * 0.75); scene.background.copy(scene.fog.color); }
       sky.visible = above;
-      rays.visible = !above && night < 0.6;
+      rays.visible = !above && night < 0.6 && storm < 0.6;
       surface.under.visible = !above;
       snow.points.visible = !above;
       snow.update(dt, camera);
@@ -219,6 +248,31 @@ function addFloor(scene) {
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geo.computeVertexNormals();
   scene.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 })));
+}
+
+// Rain: streaks falling round the camera when you're above the water in a storm.
+function addRain(scene) {
+  const N = 600, pos = new Float32Array(N * 6), seeds = Array.from({ length: N }, () => [Math.random(), Math.random(), Math.random()]);
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const lines = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xa9c4d8, transparent: true, opacity: 0.5, fog: false }));
+  lines.frustumCulled = false; lines.visible = false;
+  scene.add(lines);
+  let t = 0;
+  return {
+    update(dt, camera, on, strength) {
+      lines.visible = on;
+      if (!on) return;
+      t += dt;
+      const c = camera.position;
+      for (let i = 0; i < N; i++) {
+        const [a, b, k] = seeds[i];
+        const x = c.x + (a - 0.5) * 50, z = c.z + (b - 0.5) * 50, y = SURFACE_Y + ((k * 30 - t * 22) % 30 + 30) % 30;
+        pos.set([x, y, z, x + 0.3, y - 1.1, z + 0.2], i * 6);
+      }
+      geo.attributes.position.needsUpdate = true;
+      lines.material.opacity = 0.2 + strength * 0.45;
+    },
+  };
 }
 
 // A soft blotchy texture, used for the shimmering surface overhead and the light shafts.

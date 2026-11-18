@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SURFACE_Y } from './world.js';
+import { SURFACE_Y, floorY } from './world.js';
 
 // ---- Building on the water: tune here -----------------------------------------
 const CELL = 2;          // grid size in metres
@@ -173,7 +173,7 @@ export function createBuilder(scene, { canAfford, costFor, isUnlocked, spend, re
   }
 
   const dir = new THREE.Vector3(), at = new THREE.Vector3();
-  let bob = 0;
+  let bob = 0, level = SURFACE_Y, swell = 0, aground = false;
 
   return {
     available,
@@ -186,7 +186,7 @@ export function createBuilder(scene, { canAfford, costFor, isUnlocked, spend, re
     // Deck surface height at a point, or null over open water (buoys don't hold you up).
     deckAt(x, z) {
       const cell = cells.get(key(toCell(x), toCell(z)));
-      return cell && byId[cell.floor.id].walkable ? SURFACE_Y + DECK_TOP + bob : null;
+      return cell && byId[cell.floor.id].walkable ? level + DECK_TOP : null;
     },
     count(id) {
       let n = 0;
@@ -221,16 +221,27 @@ export function createBuilder(scene, { canAfford, costFor, isUnlocked, spend, re
       }
       return best;
     },
+    /** Storm swell (0..1): rafts bob and roll more. */
+    setSwell(v) { swell = v; },
+    /** Resting on the seabed (a low tide over a bank). */
+    get aground() { return aground; },
     update(t, camera, active) {
-      bob = Math.sin(t * 1.3) * 0.05;
-      raft.position.y = SURFACE_Y + bob;
+      bob = Math.sin(t * 1.3) * (0.05 + swell * 0.35);
+      // A raft can't sink below the seabed under it: at low tide over a bank it runs aground.
+      let ground = -Infinity;
+      for (const [k] of cells) { const [i, j] = k.split(',').map(Number); ground = Math.max(ground, floorY(cellCentre(i), cellCentre(j)) + 0.3); }
+      aground = ground > SURFACE_Y + bob;
+      level = Math.max(SURFACE_Y + bob, ground);
+      raft.position.y = level;
+      raft.rotation.z = aground ? 0 : Math.sin(t * 0.9) * 0.05 * swell;
+      raft.rotation.x = aground ? 0 : Math.cos(t * 0.7) * 0.04 * swell;
       jellyGlow.emissiveIntensity = 1.6 + Math.sin(t * 1.4) * 0.8;
       target = null;
       ghost.visible = false;
       if (!active) return;
       setGhost();
       camera.getWorldDirection(dir);
-      const planeY = SURFACE_Y + DECK_TOP + bob;
+      const planeY = level + DECK_TOP;
       if (dir.y > -0.05) return; // must look down at the water
       const dist = (planeY - camera.position.y) / dir.y;
       if (dist < 0 || dist > REACH) return;

@@ -198,7 +198,7 @@ try {
   const build = await run(`
     db.addLumen(20);
     db.builder.load([['0,9', 'raft', 3, null, 0]]);
-    db.camera.position.set(1, 26.3, 18.5);
+    db.camera.position.set(1, (await import('./src/world.js')).SURFACE_Y + 0.3, 18.5); // just above the water (it moves with the tide)
     await new Promise((r) => setTimeout(r, 400));
     return { onFoot: db.player.onFoot, pieces: db.builder.serialize().length };`);
   check('rafts float and you can climb onto them', build.onFoot && build.pieces === 1);
@@ -531,6 +531,37 @@ try {
   check('swimming into a corrupted map region repairs it', deepR.corrupt === 7 && deepR.repaired);
   check("an anglerfish's lure is a trap", deepR.anglers > 0 && deepR.bitten > 0, `${deepR.anglers} anglerfish, -${deepR.bitten.toFixed(0)} health`);
   check('abyssal polyps pay far more Lumen', deepR.gained >= 12, `+${deepR.gained} Lumen`);
+
+  // Tides move the water, storms bring lightning, and three seedlings restore a dead patch.
+  const wsys = await run(`
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const W = await import('./src/world.js');
+    db.env.phase = 0.375; // low tide
+    await sleep(200);
+    const low = W.SURFACE_Y;
+    db.env.phase = 0.125; // high tide
+    await sleep(200);
+    const high = W.SURFACE_Y;
+    db.env.phase = 0.1;
+    db.weather.force('storm');
+    db.camera.position.set(0, 12, 24);
+    await sleep(300);
+    db.lightning();
+    await sleep(100);
+    const flashed = document.getElementById('lightning').className.length > 'lightning'.length;
+    db.weather.force('clear');
+    const c = db.reef.model.cells()[0];
+    db.camera.position.set(c.x, W.floorY(c.x, c.z) + 2, c.z);
+    db.addLumen(30);
+    await sleep(200);
+    for (let i = 0; i < 3; i++) { db.plantSeedling(); await sleep(50); }
+    const restored = db.reef.model.restoredAt(c.x, c.z) || db.reef.model.restored > 0;
+    db.camera.position.set(0, 12, 24);
+    await sleep(3000); // any lightning stun passes
+    return { low, high, flashed, restored };`);
+  check('the tide lifts and drops the water', wsys.high - wsys.low > 3.5, `${wsys.low.toFixed(1)} → ${wsys.high.toFixed(1)}`);
+  check('lightning strikes in a storm', wsys.flashed);
+  check('three seedlings bring a dead patch back to life', wsys.restored);
 
   const save = await run(`
     const raw = localStorage.getItem('deeperbloom-save-v1');

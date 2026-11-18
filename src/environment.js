@@ -100,7 +100,8 @@ export function createEnvironment(scene) {
     answer() { if (giantT < 0) giantNext = Math.min(giantNext, 3 + Math.random() * 4); },
 
     // Returns { push (acceleration on the player), breath, fog (per second), inSinkhole, inVent, giantStart, giantEnd }
-    update(dt, t, p, { logsDone = false, exposed = true } = {}) {
+    update(dt, t, p, { logsDone = false, exposed = true, tide = 0 } = {}) {
+      const highTide = 1 + Math.max(0, tide) / 2.2 * 0.6; // sinkholes pull up to 60% harder at high tide
       phase = (phase + dt / DAY.length) % 1;
       push.set(0, 0, 0);
       const out = { push, breath: 0, fog: 0 };
@@ -123,7 +124,7 @@ export function createEnvironment(scene) {
         if (exposed && sd < h.r * 1.6) {
           const f = 1 - sd / (h.r * 1.6);
           push.x += (sx / (sd || 1)) * 3 * f; push.z += (sz / (sd || 1)) * 3 * f;
-          if (sd < h.r) { push.y -= h.pull * f; out.inSinkhole = true; }
+          if (sd < h.r) { push.y -= h.pull * f * highTide; out.inSinkhole = true; }
         }
         if (sd > 90) continue; // only animate the ones you could see
         const gp = grit.geometry.attributes.position;
