@@ -115,6 +115,15 @@ export function drawMap(canvas, reveal, view) {
   const [sx, sy] = [(cx - span / 2 + R) * tScale, (cz - span / 2 + R) * tScale];
   g.imageSmoothingEnabled = true;
   g.drawImage(t, sx, sy, span * tScale, span * tScale, 0, 0, size, size);
+  // Corrupted regions: the map draws the seabed from somewhere else there, tinted wrong.
+  for (const b of view.corrupt || []) {
+    const [px, py] = toPx(b.x, b.z), rr = b.r * scale;
+    g.save(); g.beginPath(); g.arc(px, py, rr, 0, Math.PI * 2); g.clip();
+    const [fx, fy] = [(b.x + b.ox - b.r + R) * tScale, (b.z + b.oz - b.r + R) * tScale];
+    g.drawImage(t, fx, fy, b.r * 2 * tScale, b.r * 2 * tScale, px - rr, py - rr, rr * 2, rr * 2);
+    g.fillStyle = 'rgba(255, 60, 200, 0.10)'; g.fillRect(px - rr, py - rr, rr * 2, rr * 2);
+    g.restore();
+  }
   g.fillStyle = 'rgba(2, 10, 16, 0.94)';
   const cs = reveal.cellSize;
   for (let j = 0; j < reveal.cells; j++) for (let i = 0; i < reveal.cells; i++) {
@@ -123,6 +132,16 @@ export function drawMap(canvas, reveal, view) {
     const w = cs * scale + 0.6;
     if (px > size || py > size || px + w < 0 || py + w < 0) continue;
     g.fillRect(px, py, w, w);
+  }
+  // A dead zone of static (round the outpost, until Navigation is back).
+  if (view.deadZone) {
+    const [px, py] = toPx(view.deadZone.x, view.deadZone.z), rr = view.deadZone.r * scale;
+    g.save(); g.beginPath(); g.arc(px, py, rr, 0, Math.PI * 2); g.clip();
+    for (let y = py - rr; y < py + rr; y += 3) for (let x = px - rr; x < px + rr; x += 3) {
+      const v = 30 + Math.random() * 90; g.fillStyle = `rgb(${v},${v},${v + 10})`; g.fillRect(x, y, 3, 3);
+    }
+    g.restore();
+    g.fillStyle = '#ff8f8f'; g.font = '600 10px monospace'; g.textAlign = 'center'; g.fillText('NO DATA', px, py + 3);
   }
   // Echo's reach, and the buoys relaying it.
   const ring = (x, z, r, colour) => { const [px, py] = toPx(x, z); g.beginPath(); g.arc(px, py, r * scale, 0, Math.PI * 2); g.strokeStyle = colour; g.setLineDash([4, 4]); g.lineWidth = 1; g.stroke(); g.setLineDash([]); };
@@ -154,5 +173,14 @@ export function drawMap(canvas, reveal, view) {
   g.fillStyle = '#5CF2D6'; g.shadowColor = '#5CF2D6'; g.shadowBlur = 8; g.fill(); g.restore();
   // North marker.
   g.fillStyle = 'rgba(230, 244, 242, .7)'; g.font = '600 11px Unbounded, sans-serif'; g.textAlign = 'center'; g.fillText('N', size / 2, 14);
+  // Water damage: bands of the picture slip sideways now and then (less as you repair the visor).
+  const glitch = view.glitch ?? 0;
+  if (glitch > 0 && Math.random() < 0.25 + glitch * 0.5) {
+    for (let k = 0; k < 1 + Math.floor(Math.random() * 3 * glitch + 0.5); k++) {
+      const y = Math.random() * size, h = 4 + Math.random() * 18, dx = (Math.random() - 0.5) * 40 * glitch;
+      g.drawImage(canvas, 0, y, size, h, dx, y, size, h);
+      g.fillStyle = `rgba(${Math.random() < 0.5 ? '92, 242, 214' : '255, 80, 200'}, 0.12)`; g.fillRect(0, y, size, h);
+    }
+  }
   return { toWorld: (px, py) => ({ x: (px - size / 2) / scale + cx, z: (py - size / 2) / scale + cz }) };
 }

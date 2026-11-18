@@ -96,6 +96,8 @@ export function createEnvironment(scene) {
     get giantPos() { return giant.visible ? giant.position : null; },
     /** Skips ahead (for testing). */
     forceGiant() { giantNext = 0; },
+    /** Something heard your sonar: the giant comes by soon. */
+    answer() { if (giantT < 0) giantNext = Math.min(giantNext, 3 + Math.random() * 4); },
 
     // Returns { push (acceleration on the player), breath, fog (per second), inSinkhole, inVent, giantStart, giantEnd }
     update(dt, t, p, { logsDone = false, exposed = true } = {}) {

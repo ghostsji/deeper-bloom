@@ -588,3 +588,15 @@ body[data-theme="green"] { --cyan: #7CFF8A; --hud-line: rgba(124, 255, 138, .38)
 .phone .mk.sq { border-radius: 1px; }
 .compass .mark.waypoint { width: 10px; height: 10px; background: none; border: 2px solid var(--gold); rotate: 45deg; box-shadow: 0 0 8px var(--gold); }
 .compass .mark.waypoint::after { color: var(--gold); rotate: -45deg; }
+
+/* ---- Sonar ---- */
+.sonarring { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; border: 2px solid rgba(143, 232, 255, .8); opacity: 0; pointer-events: none; }
+.sonarring.go { animation: sonar 1.4s ease-out; }
+@keyframes sonar { 0% { opacity: 1; transform: scale(.2); } 100% { opacity: 0; transform: scale(48); border-width: 1px; } }
+.sonarmarks { position: absolute; inset: 0; pointer-events: none; }
+.sonarmarks .sm { position: absolute; width: 16px; height: 16px; translate: -50% -50%; border: 1.5px solid #8fe8ff; border-radius: 50%; box-shadow: 0 0 8px #8fe8ff; }
+.sonarmarks .sm::after { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: currentColor; }
+.sonarmarks .sm.pod, .sonarmarks .sm.cell, .sonarmarks .sm.fuse, .sonarmarks .sm.upgrade, .sonarmarks .sm.log, .sonarmarks .sm.part { color: #5CF2D6; border-radius: 3px; rotate: 45deg; }
+.sonarmarks .sm.eel, .sonarmarks .sm.angler { color: #ff5c6c; border-color: #ff5c6c; box-shadow: 0 0 8px #ff3050; }
+.sonarmarks .sm.jelly { color: #ff8fd0; border-color: #ff8fd0; }
+.sonarmarks .sm.abyss { color: #b59cff; border-color: #b59cff; box-shadow: 0 0 10px #9a6bff; }

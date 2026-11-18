@@ -10,6 +10,9 @@ import { CURRENTS, SINKHOLES, VENTS } from './environment.js';
 // modules that read these (salvage, hazards, outpost, environment).
 
 export const SPOTS = {}; // salvage pod positions: { codex: {x, z}, status, goals, skills, far }
+// Regions the water-damaged map gets wrong (it shows the seabed from somewhere else) until you
+// swim right into them or sweep them with sonar: [{ x, z, r, ox, oz }].
+export const CORRUPT = [];
 const START = { x: 0, z: 24 };
 const depthAt = (x, z) => SURFACE_Y - floorY(x, z);
 const flat = (x, z, span = 7, tol = 2.5) => {
@@ -69,6 +72,10 @@ export function generateLayout(seed, kelpPatches = []) {
   const patch = [...kelpPatches].filter((p) => Math.hypot(p.x, p.z - START.z) > 130 && Math.hypot(p.x, p.z) < WORLD_RADIUS - 60)
     .sort((a, b) => Math.hypot(a.x, a.z - START.z) - Math.hypot(b.x, b.z - START.z))[0];
   L.spots.skills = patch ? { x: patch.x + 1.5, z: patch.z } : find(140, 220, () => true, 20);
+  L.corrupt = Array.from({ length: 7 }, () => {
+    const a = range(0, Math.PI * 2), shift = range(90, 160);
+    return { ...find(60, WORLD_RADIUS - 70, () => true, 60), r: range(24, 42), ox: Math.cos(a) * shift, oz: Math.sin(a) * shift };
+  });
   return L;
 }
 
@@ -82,5 +89,6 @@ export function applyLayout(seed, kelpPatches) {
   SINKHOLES.splice(0, SINKHOLES.length, ...L.sinkholes);
   VENTS.splice(0, VENTS.length, ...L.vents);
   Object.assign(SPOTS, L.spots);
+  CORRUPT.splice(0, CORRUPT.length, ...L.corrupt);
   return L;
 }

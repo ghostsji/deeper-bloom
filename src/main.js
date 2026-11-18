@@ -4,7 +4,8 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { buildWorld, SURFACE_Y, floorY, setWorldSeed } from './world.js';
-import { applyLayout } from './layout.js';
+import { applyLayout, CORRUPT } from './layout.js';
+import { createDeep } from './deep.js';
 import { createReveal } from './map.js';
 import { createPlayer } from './player.js';
 import { createBuilder, PIECES, FARM_MAX } from './build.js';
@@ -31,7 +32,7 @@ import { LOGS, FULL_MEMORY } from './logs.js';
 import { UPGRADES } from './suit.js';
 import { setTooltips } from './tooltips.js';
 import { keyName } from './controls.js';
-import { initAudio, updateAudio, setMusic, uiSound, pop, chime, thunk, salvagePing, rebootSound, glitchSound, staticSound, creakSound, glassCrackSound, bubbleSound, lowPowerSound, chargeSound, sparkSound, setEars, earPop, giantDrone, setPaused, gasp, heartbeat, warn, munch, sizzle, grab, harpoonFire, thud, hiss, bite, release, click } from './audio.js';
+import { initAudio, updateAudio, setMusic, uiSound, pop, chime, thunk, salvagePing, rebootSound, glitchSound, staticSound, creakSound, glassCrackSound, bubbleSound, lowPowerSound, chargeSound, sparkSound, setEars, earPop, giantDrone, sonarSound, giantCall, setPaused, gasp, heartbeat, warn, munch, sizzle, grab, harpoonFire, thud, hiss, bite, release, click } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 const BLOOM_FULL = 60;   // Lumen gathered for the reef to glow at full strength
@@ -66,7 +67,7 @@ const world = buildWorld(scene);
 applyLayout(worldSeed, world.kelpPatches); // the outpost, wrecks, cables, vents... from the seed
 // The map: what you've explored (fog of war), and the waypoint you've set.
 const reveal = createReveal();
-let waypoint = null;
+let waypoint = null, fixedCorrupt = new Set(); // corrupted map regions you've repaired
 const player = createPlayer(camera, canvas);
 // The tutorial in the corner: steps finish from lifetime stats plus these notes.
 const tutorial = createTutorial(progress.stat);
@@ -99,6 +100,8 @@ const outpost = createOutpost(scene);
 createWrecks(scene);
 // Night and day, currents, the sinkhole, gas vents, and the giant.
 const env = createEnvironment(scene);
+// The trenches' own life: anglerfish, abyssal polyps, crushed wreckage.
+const deep = createDeep(scene);
 // The visor's own light, for the dark. It's always in the scene (so adding it never makes the
 // renderer rebuild its shaders); at night it comes on and costs battery.
 const headlamp = new THREE.SpotLight(0xd8fff7, 0, 26, 0.5, 0.6, 1.4);
@@ -255,7 +258,7 @@ function gather(n, bright) {
 function save() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      seed: worldSeed, map: reveal.serialize(), waypoint, lumen, builds: builder.serialize(), research: research.serialize(), survival: survival.serialize(), progress: progress.serialize(), tutorial: tutorial.serialize(), systems: systems.serialize(), apps: salvage.serialize(), suit: suit.serialize(), env: env.serialize(), pearlLevel, hasScreen, phoneFixed, endingSeen, boostersMade, outpost: outpost.serialize(), fusesHeld,
+      seed: worldSeed, map: reveal.serialize(), waypoint, mapFixed: [...fixedCorrupt], lumen, builds: builder.serialize(), research: research.serialize(), survival: survival.serialize(), progress: progress.serialize(), tutorial: tutorial.serialize(), systems: systems.serialize(), apps: salvage.serialize(), suit: suit.serialize(), env: env.serialize(), pearlLevel, hasScreen, phoneFixed, endingSeen, boostersMade, outpost: outpost.serialize(), fusesHeld,
       satchel: satchel && { pos: satchel.pos.toArray(), items: satchel.items },
     }));
   } catch { /* not saved */ }
@@ -274,6 +277,7 @@ function load() {
     env.load(data.env);
     reveal.load(data.map);
     waypoint = data.waypoint || null;
+    fixedCorrupt = new Set(data.mapFixed || []);
     pearlLevel = data.pearlLevel || 0; hasScreen = !!data.hasScreen; phoneFixed = !!data.phoneFixed; endingSeen = !!data.endingSeen; boostersMade = data.boostersMade || 0;
     world.echo.setSize(1 + pearlLevel * 0.25);
     if (outpost.powered) salvage.unlockVault();
@@ -821,6 +825,60 @@ function updateTutorial() {
 }
 
 // ---- The map ------------------------------------------------------------------------
+// Corrupted regions get repaired when you're within part of their radius (or sonar reaches them).
+function repairMap(pos, within, reach = 0) {
+  CORRUPT.forEach((b, i) => {
+    if (fixedCorrupt.has(i) || Math.hypot(b.x - pos.x, b.z - pos.z) > b.r * within + reach) return;
+    fixedCorrupt.add(i);
+    toast('Map data repaired for this area.', { color: '#5CF2D6' });
+  });
+}
+
+// ---- Sonar (Z) -------------------------------------------------------------------------
+const SONAR = { cost: 3, every: 4, range: 90, show: 4 };
+let sonarAt = -99, sonarTargets = [];
+const _proj = new THREE.Vector3();
+function sonarPing() {
+  if (playTime - sonarAt < SONAR.every) { click(); return; }
+  if (suit.power < SONAR.cost) { click(); toast('Not enough battery for a sonar ping.'); return; }
+  sonarAt = playTime;
+  suit.drain(SONAR.cost);
+  sonarSound();
+  const ring = $('sonarring');
+  ring.classList.remove('go'); void ring.offsetWidth; ring.classList.add('go');
+  const pos = camera.position;
+  reveal.reveal(pos.x, pos.z, SONAR.range);
+  repairMap(pos, 0, SONAR.range);
+  // What the ping found: outlined on the visor for a few seconds.
+  const near = (p) => p.distanceTo(pos) < SONAR.range;
+  sonarTargets = [
+    ...salvage.remaining().filter((p) => near(p.pos)).map((p) => ({ kind: p.kind === 'app' ? 'pod' : p.kind, pos: p.pos })),
+    ...combat.eelPositions().filter(near).map((p) => ({ kind: 'eel', pos: p })),
+    ...world.jellies.filter((j) => near(j.position)).map((j) => ({ kind: 'jelly', pos: j.position })),
+    ...deep.near(pos, SONAR.range),
+  ];
+  // Eels hear it. And sometimes something answers.
+  const woke = combat.alert(pos, SONAR.range);
+  if (woke) toast(`Your ping woke ${woke} eel${woke > 1 ? 's' : ''}. They're coming to look.`, { color: '#ff9a5c' });
+  if (Math.random() < 0.35) { env.answer(); setTimeout(giantCall, 1500); }
+  save();
+}
+function updateSonar() {
+  const age = playTime - sonarAt, on = age < SONAR.show && state === 'playing';
+  world.setSonar(Math.max(0, 1 - age / 2.5));
+  const box = $('sonarmarks');
+  if (!on) { if (box.childElementCount) box.innerHTML = ''; return; }
+  while (box.childElementCount < sonarTargets.length) box.append(document.createElement('i'));
+  sonarTargets.forEach((tg, i) => {
+    const el = box.children[i];
+    _proj.copy(tg.pos).project(camera);
+    const vis = _proj.z < 1 && Math.abs(_proj.x) < 1.05 && Math.abs(_proj.y) < 1.05;
+    el.className = `sm ${tg.kind}`;
+    el.style.display = vis ? '' : 'none';
+    if (vis) { el.style.left = `${(_proj.x + 1) * 50}%`; el.style.top = `${(1 - _proj.y) * 50}%`; el.style.opacity = 1 - age / SONAR.show; }
+  });
+  for (let i = sonarTargets.length; i < box.childElementCount; i++) box.children[i].style.display = 'none';
+}
 function mapView() {
   camera.getWorldDirection(_dir);
   const pts = (id) => { const out = []; builder.each(id, (pc) => { const w = pc.mesh.getWorldPosition(new THREE.Vector3()); out.push({ x: w.x, z: w.z }); }); return out; };
@@ -832,6 +890,9 @@ function mapView() {
     echo: { x: world.echo.position.x, z: world.echo.position.z }, echoRange: 30 + pearlLevel * 25,
     rafts: pts('raft'), buoys: pts('buoy'), relayRange: 35,
     satchel: satchel && { x: satchel.pos.x, z: satchel.pos.z }, pins, waypoint,
+    deadZone: systems.online('nav') ? null : { x: OUTPOST.x, z: OUTPOST.z, r: 55 },
+    corrupt: CORRUPT.filter((_, i) => !fixedCorrupt.has(i)),
+    glitch: 1 - systems.integrity,
   };
 }
 
@@ -906,8 +967,10 @@ onShock(({ where }) => takeShock(where));
 
 // ---- The suit: visor battery, pressure, live electricity --------------------------
 const _buoy = new THREE.Vector3();
+let anglerSaid = false, abyssSaid = false;
 let silt = 0, surgeBlockedSaid = false, lastCamY = 0, earsWarned = false, ventClock = 0, sinkSaid = false, nightSaid = false;
 addEventListener('keydown', (e) => { if (e.code === 'KeyH' && state === 'playing' && suit.equalise()) earPop(); });
+addEventListener('keydown', (e) => { if (e.code === 'KeyZ' && state === 'playing' && !player.stunned && !e.repeat) sonarPing(); });
 let creakClock = 3, bubbleClock = 0, sparkClock = 0, wasCharging = false, purgeHeld = false, purgeClock = 0;
 addEventListener('keydown', (e) => { if (e.code === 'KeyG') purgeHeld = true; });
 addEventListener('keyup', (e) => { if (e.code === 'KeyG') purgeHeld = false; });
@@ -938,6 +1001,7 @@ function updateSuit(dt) {
   if (envOut.giantEnd) giantDrone(false);
   // The map fills in around you as you explore; reaching the waypoint clears it.
   reveal.reveal(camera.position.x, camera.position.z);
+  repairMap(camera.position, 0.5);
   if (waypoint && Math.hypot(waypoint.x - camera.position.x, waypoint.z - camera.position.z) < 6) {
     waypoint = null;
     chime();
@@ -952,6 +1016,14 @@ function updateSuit(dt) {
   if (sig < 0.15 && signal >= 0.15) toast("You've swum out of Echo's range. Build glow buoys to relay her signal.", { color: '#9fb8ff' });
   signal = sig;
   hudFx.setSignal(signal);
+  // The deep: anglerfish lunge at you, abyssal polyps pay out.
+  const dp = deep.update(dt, t, camera.position, under && !player.onFoot);
+  if (dp.bite) {
+    bite(); survival.damage(dp.bite); hurtFlash(); suit.bitten();
+    if (!anglerSaid) { anglerSaid = true; toast('An anglerfish! That glowing light was its lure.', { color: '#ff8f8f' }); }
+  }
+  if (dp.collected) { gather(dp.collected, true); if (!abyssSaid) { abyssSaid = true; toast('An abyssal polyp: they only grow this deep, and pay far more.', { color: '#b59cff' }); } }
+  updateSonar();
   const sinkSpeed = Math.max(0, (lastCamY - camera.position.y) / Math.max(dt, 1e-3));
   lastCamY = camera.position.y;
   const ev = suit.update(dt, { depth, surfaced, onDeck: player.onFoot, sealed, dashing: player.dashing, breath: survival.stats.breath, sinkSpeed });
@@ -1282,7 +1354,7 @@ function frame() {
 
 
 // ?debug exposes the internals in the console.
-if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { worldSeed, reveal, getWaypoint: () => waypoint, renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, systems, hudFx, salvage, suit, hazards, outpost, rewire, env, headlamp, phone, feedPearl, setScreen: () => { hasScreen = true; }, getPearl: () => pearlLevel, getSignal: () => signal, isFixed: () => phoneFixed, giveFuses: (n) => { fusesHeld += n; }, setSilt: (v) => { silt = v; }, getSilt: () => silt, addLumen: (n) => setLumen(lumen + n) } });
+if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { worldSeed, reveal, deep, sonarPing, getSonar: () => sonarTargets, getFixedMap: () => fixedCorrupt, getWaypoint: () => waypoint, renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, systems, hudFx, salvage, suit, hazards, outpost, rewire, env, headlamp, phone, feedPearl, setScreen: () => { hasScreen = true; }, getPearl: () => pearlLevel, getSignal: () => signal, isFixed: () => phoneFixed, giveFuses: (n) => { fusesHeld += n; }, setSilt: (v) => { silt = v; }, getSilt: () => silt, addLumen: (n) => setLumen(lumen + n) } });
 
 renderBuildBar();
 load();

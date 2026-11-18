@@ -33,6 +33,7 @@ export const FOG = {
   clear: 0.2,        // fog cleared per second with your head out of the water
   purge: 0.7,        // fog cleared per second holding purge
   purgePower: 0.6,   // battery % per second the purge costs
+  abyss: 0.035,      // extra fog per second below 40 m (the deep cold)
 };
 export const HEAT = {
   dash: 0.14, charge: 0.03, shock: 0.25, // heat per second (per shock): a long dash overheats in ~12 s
@@ -120,7 +121,7 @@ export function createSuit() {
       if (heat >= 1 && !overheated) { overheated = true; ev.overheat = true; }
       if (overheated && heat < HEAT.reset) overheated = false;
       // Fog: cold deep water and heavy breathing fog the glass; air clears it.
-      const fogRate = (Math.max(0, s.depth - FOG.coldDepth) / 10) * FOG.cold + (s.dashing || (s.breath ?? 100) < 40 ? FOG.panting : 0);
+      const fogRate = (Math.max(0, s.depth - FOG.coldDepth) / 10) * FOG.cold + (s.depth > 40 ? FOG.abyss : 0) + (s.dashing || (s.breath ?? 100) < 40 ? FOG.panting : 0);
       if (s.surfaced || s.onDeck) fog = Math.max(0, fog - FOG.clear * dt);
       else fog = Math.min(1, fog + fogRate * (upgrades.has('coating') ? 0.5 : 1) * dt);
       // Blight spreads once it has a hold (half as fast with a filter).

@@ -250,6 +250,12 @@ export function createCombat(scene, camera, world, g) {
     get loaded() { return !shot; },
     get eels() { return eels; }, // for debugging and tests
     setNight(n) { nightSight = 1 + n * 0.5; },
+    /** A loud noise (your sonar): eels within radius come to look. Returns how many. */
+    alert(pos, radius) {
+      let n = 0;
+      for (const e of eels) if (e.alive && e.segs[0].position.distanceTo(pos) < radius && e.mode !== 'chase') { e.mode = 'chase'; n++; }
+      return n;
+    },
     /** Where the living eels are (for the threat sensor on the compass). */
     eelPositions: () => eels.filter((e) => e.alive).map((e) => e.segs[0].getWorldPosition(new THREE.Vector3())),
     setEquipped(v) { equipped = v; gun.visible = v; },

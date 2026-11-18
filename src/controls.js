@@ -10,7 +10,8 @@ export const ACTIONS = [
   { id: 'phone', label: 'Phone', code: 'Tab' }, { id: 'codex', label: 'Codex', code: 'KeyJ' },
   { id: 'use', label: 'Use', code: 'KeyF' }, { id: 'eat', label: 'Eat', code: 'KeyR' },
   { id: 'stopBuilding', label: 'Stop building', code: 'KeyX' }, { id: 'pause', label: 'Pause', code: 'KeyP' },
-  { id: 'purge', label: 'Purge visor fog (hold)', code: 'KeyG' }, { id: 'equalise', label: 'Equalise ears', code: 'KeyH' }, { id: 'rewire', label: 'Rewire visor', code: 'KeyV' },
+  { id: 'purge', label: 'Purge visor fog (hold)', code: 'KeyG' }, { id: 'equalise', label: 'Equalise ears', code: 'KeyH' },
+  { id: 'sonar', label: 'Sonar ping', code: 'KeyZ' }, { id: 'rewire', label: 'Rewire visor', code: 'KeyV' },
 ];
 
 /** A readable name for a key code: "W", "Space", "Left Ctrl", "Arrow Up". */

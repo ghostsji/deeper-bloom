@@ -119,7 +119,7 @@ export function buildWorld(scene) {
   // Stirred-up silt clouding the water (0 clear .. 1 you can barely see). See main.js.
   let silt = 0;
   // Night (0 day .. 1 night): the light drops and the water goes near black.
-  let night = 0;
+  let night = 0, sonar = 0; // a sonar ping thins the fog for a moment
   const nightWater = new THREE.Color(0x02090d), nightAir = new THREE.Color(0x04060f);
   const siltFog = new THREE.Color(0x3b3a2a);
 
@@ -132,6 +132,7 @@ export function buildWorld(scene) {
     setBloom(v) { bloom = v; },
     setSilt(v) { silt = v; },
     setNight(v) { night = v; },
+    setSonar(v) { sonar = v; },
     update(dt, t, camera, playerSpeed = 0) {
       time.value = t;
       hemi.intensity = (0.9 + bloom * 0.7) * (1 - night * 0.72);
@@ -140,7 +141,7 @@ export function buildWorld(scene) {
       const above = camera.position.y > SURFACE_Y;
       scene.fog.color.copy(above ? airFog : waterFog).lerp(above ? nightAir : nightWater, night * 0.8);
       scene.background.copy(scene.fog.color);
-      scene.fog.density = above ? 0.009 : 0.03 - bloom * 0.008 + silt * 0.16;
+      scene.fog.density = (above ? 0.009 : 0.03 - bloom * 0.008 + silt * 0.16) * (1 - sonar * 0.6);
       if (!above && silt > 0) { scene.fog.color.lerp(siltFog, silt * 0.75); scene.background.copy(scene.fog.color); }
       sky.visible = above;
       rays.visible = !above && night < 0.6;

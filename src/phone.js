@@ -60,7 +60,9 @@ const GUIDES = [
   ['Echo\'s signal and her pearl', () => `Echo can only reach you so far from her pearl. Further out her subtitles break up, her tips arrive late, and past a certain range she goes quiet (ECHO bars, top left). Glow buoys you build relay her signal for another 35 m around them. Bring Lumen to her pearl and press ${k('use')} to grow it (25, 50, then 100 Lumen): each size reaches 25 m further and makes the whole reef glow brighter.`],
   ['The outpost\'s rooms', () => `Once the outpost has power, its rooms work, for as long as the generator has fuel: feed it kelp with ${k('use')} (1 kelp = 20%). The lab bench crafts visor parts from kelp and Lumen (a blight filter, a seal patch kit, a battery booster). The radio is for calling for help, once you know what happened here.`],
   ['Fixing the phone', () => `The second wreck's stern hides a replacement phone screen (light blue pod). Take it to a workbench and press ${k('use')}: peel the cracked glass away piece by piece without touching the live cracks. After that the phone never shocks you again, and its colours come back.`],
-  ['The map', () => 'The Map app shows the seabed coloured by depth: pale teal shallows, deep blue, and near-black trenches. It starts hidden: everything within about 30 m of where you swim is revealed, and it remembers. Pods, wrecks and the outpost appear once you\'ve been near them. Tap the map to set a waypoint: it shows on your compass with its distance, and clears when you get there. Zoom in to see the 240 m around you.'],
+  ['Sonar', () => `Press ${k('sonar')} to send a sonar ping (3% battery, every 4 s): a ring sweeps out, the fog thins for a moment, everything within 90 m (pods, creatures, deep life) is outlined on your visor, and the map fills in around you and repairs any corrupted regions it reaches. But eels hear it and come to look, and sometimes something very large answers.`],
+  ['The deep', () => 'Below about 40 m, in the trenches, the cold fogs your visor much faster and the pressure is brutal on unsealed glass. Abyssal polyps (violet) grow only down here and pay far more Lumen. Crushed wreckage litters the floor. And some of those glowing lights aren\'t polyps: anglerfish hang in the dark with a lure that looks just like one, and lunge when you swim up to it.'],
+  ['The map', () => 'The map is water-damaged too: it flickers, a dead zone of static hides the outpost\'s area until Navigation is back, and some regions (tinted pink) show the seabed from somewhere else until you swim into them or sweep them with sonar. The Map app shows the seabed coloured by depth: pale teal shallows, deep blue, and near-black trenches. It starts hidden: everything within about 30 m of where you swim is revealed, and it remembers. Pods, wrecks and the outpost appear once you\'ve been near them. Tap the map to set a waypoint: it shows on your compass with its distance, and clears when you get there. Zoom in to see the 240 m around you.'],
   ['Goals and skills', () => 'Every goal (Lumen gathered, scans, fish, distance swum...) has endless tiers. Each tier pays Bloom points, which you spend on the Skills tab. Some skills need another one learned first.'],
   ['Blacking out', () => 'If your health hits zero you black out and wake on your nearest raft. Your bag drops where you fell: swim back to the gold ring to pick it up. Blacking out again before you do loses it.'],
   ['Saving', () => 'The game saves as you play. Save game (on the pause menu or the main menu) also copies it to one of three slots, and Load game brings one back.'],
@@ -285,9 +287,13 @@ export function createPhone(el, g) {
       </div>
       <p class="sub"><span class="mk" style="background:#F4EEE6"></span>Echo <span class="mk" style="background:#5CF2D6"></span>pods <span class="mk sq" style="background:#C9A36A"></span>rafts <span class="mk sq" style="background:#FF9A5C"></span>outpost <span class="mk sq" style="background:#B8A07A"></span>wrecks. Dashed rings: Echo's signal and your buoys' reach.</p>`;
   }
+  let mapTimer = 0;
   function paintMap() {
     const cv = body.querySelector('[data-map]');
-    if (cv) mapXf = drawMap(cv, g.reveal, { ...g.mapView(), zoom: mapZoom });
+    if (!cv) { clearInterval(mapTimer); mapTimer = 0; return; }
+    mapXf = drawMap(cv, g.reveal, { ...g.mapView(), zoom: mapZoom });
+    // Redraw now and then while it's open, so the water damage flickers.
+    if (!mapTimer) mapTimer = setInterval(() => { if (tab === 'map' && el.classList.contains('up')) paintMap(); else { clearInterval(mapTimer); mapTimer = 0; } }, 450);
   }
 
   // An app the flood washed away: an empty, broken page until you find its module.

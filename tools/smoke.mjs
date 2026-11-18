@@ -494,6 +494,44 @@ try {
   check('the Map app draws the explored seabed', mapR.canvas && mapR.explored > 0, `${(mapR.explored * 100).toFixed(1)}% explored`);
   check('tapping the map sets a waypoint', mapR.wp);
 
+  // Sonar, corrupted map regions, and the deep's anglerfish and abyssal polyps.
+  const deepR = await run(`
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const W = await import('./src/world.js'), L = await import('./src/layout.js');
+    db.suit.load({ power: 90 });
+    db.camera.position.set(0, 12, 24);
+    await sleep(4200); // past the sonar's cooldown from anything earlier
+    const ex0 = db.reveal.explored, fog0 = db.scene.fog.density;
+    db.sonarPing();
+    await sleep(150);
+    const pinged = db.reveal.explored > ex0, thinner = db.scene.fog.density < fog0, rings = document.getElementById('sonarring').classList.contains('go');
+    // Swim into a corrupted region: it gets repaired.
+    const b = L.CORRUPT[0];
+    db.camera.position.set(b.x, W.floorY(b.x, b.z) + 4, b.z);
+    await sleep(200);
+    const repaired = db.getFixedMap().has(0);
+    // An anglerfish's lure: it bites.
+    const a = db.deep.anglers[0];
+    const h0 = db.survival.stats.health;
+    a.lure.getWorldPosition(db.camera.position);
+    await sleep(150);
+    const bitten = h0 - db.survival.stats.health;
+    db.camera.position.set(0, 12, 24);
+    await sleep(300);
+    // An abyssal polyp: far more Lumen.
+    const pol = db.deep.polyps.find((x) => x.g.visible);
+    const lum0 = Number(document.getElementById('lumen').textContent.replace(/[^0-9]/g, '')) || 0;
+    pol.bulb.getWorldPosition(db.camera.position);
+    await sleep(200);
+    const lum1 = Number(document.getElementById('lumen').textContent.replace(/[^0-9]/g, '')) || 0;
+    db.camera.position.set(0, 12, 24);
+    await sleep(300);
+    return { pinged, thinner, rings, repaired, bitten, gained: lum1 - lum0, anglers: db.deep.anglers.length, corrupt: L.CORRUPT.length };`);
+  check('a sonar ping reveals the map around you and thins the fog', deepR.pinged && deepR.thinner && deepR.rings);
+  check('swimming into a corrupted map region repairs it', deepR.corrupt === 7 && deepR.repaired);
+  check("an anglerfish's lure is a trap", deepR.anglers > 0 && deepR.bitten > 0, `${deepR.anglers} anglerfish, -${deepR.bitten.toFixed(0)} health`);
+  check('abyssal polyps pay far more Lumen', deepR.gained >= 12, `+${deepR.gained} Lumen`);
+
   const save = await run(`
     const raw = localStorage.getItem('deeperbloom-save-v1');
     const s = raw && JSON.parse(raw);

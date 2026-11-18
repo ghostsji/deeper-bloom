@@ -581,3 +581,19 @@ export function giantDrone(on) {
   giantGain.gain.setTargetAtTime(on ? 0.14 : 0, t, on ? 3 : 2);
   giantOsc.frequency.setTargetAtTime(on ? 27 : 31, t, 4);
 }
+
+// Sonar: a falling sweep out into the water, and its faint echo coming back.
+export function sonarSound() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  beep(t, 1900, 620, 0.9, { type: 'sine', gain: 0.07 });
+  voice(1240, t + 0.02, 1.6, { type: 'sine', gain: 0.025, out: sfx, echo: 1, attack: 0.005 });
+  beep(t + 1.1, 1500, 700, 0.6, { type: 'sine', gain: 0.018 });
+}
+// Something huge answering your ping: a long, very low call.
+export function giantCall() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  voice(48, t, 4, { type: 'sawtooth', gain: 0.05, out: sfx, echo: 1, attack: 1.2 });
+  voice(36, t + 0.6, 4, { type: 'sine', gain: 0.08, out: sfx, echo: 0.6, attack: 1.4 });
+}
