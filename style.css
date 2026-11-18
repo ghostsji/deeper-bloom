@@ -607,3 +607,7 @@ body[data-theme="green"] { --cyan: #7CFF8A; --hud-line: rgba(124, 255, 138, .38)
 .lightning.dim { animation: lightdim .4s steps(3); }
 @keyframes lightning { 0% { opacity: .9; } 25% { opacity: .2; } 50% { opacity: .75; } 100% { opacity: 0; } }
 @keyframes lightdim { 0% { opacity: .25; } 50% { opacity: .08; } 100% { opacity: 0; } }
+
+/* Frame-rate counter (Options > Display > Show frame rate). */
+.fps { position: fixed; left: 50%; bottom: 8px; transform: translateX(-50%); z-index: 60; pointer-events: none;
+  font: 600 11px/1 ui-monospace, Consolas, monospace; letter-spacing: 0.1em; color: #9ff6e6; opacity: 0.75; }

@@ -600,18 +600,32 @@ try {
     const rebound = document.querySelector('#settings [data-bind="forward"]').textContent;
     document.querySelector('#settings [data-reset="controls"]').click();
     const reset = document.querySelector('#settings [data-bind="forward"]').textContent;
+    // Performance options: render distance, scenery distance, chunk size, frame-rate counter.
+    document.querySelector('#settings [data-tab="display"]').click();
+    const slide = (k, v) => { const r = document.querySelector('#settings [data-k="' + k + '"]'); r.value = v; r.dispatchEvent(new Event('input', { bubbles: true })); };
+    const chunks0 = db.world.chunkCount;
+    slide('viewDist', 80); slide('sceneryDist', 60); slide('chunkSize', 60);
+    const fpsBox = document.querySelector('#settings [data-help="showFps"]'); fpsBox.checked = true; fpsBox.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(700);
+    const perf = { far: db.camera.far, chunks0, chunks: db.world.chunkCount, fps: !document.getElementById('fps').hidden && /fps/.test(document.getElementById('fps').textContent) };
+    document.querySelector('#settings [data-reset="perf"]').click();
+    await sleep(100);
+    perf.farBack = db.camera.far; perf.chunksBack = db.world.chunkCount; perf.fpsOff = document.getElementById('fps').hidden;
     document.querySelector('#settings [data-back]').click();
     await sleep(100);
     const settingsBack = !shown('settings') && shown('pause');
     ${$('tomenu')}.click();
     await sleep(300);
     const title = shown('title') && !document.querySelector('[data-menu="continue"]').hidden;
-    return { paused, rows, msg, slot1: !!slot1?.summary, backToPause, tabs, rebound, reset, settingsBack, title };`);
+    return { paused, rows, msg, slot1: !!slot1?.summary, backToPause, tabs, rebound, reset, perf, settingsBack, title };`);
   check('P opens the pause menu with all its buttons', menus.paused);
   check('Save game saves to a slot', menus.rows === 3 && menus.slot1 && /slot 1/.test(menus.msg), menus.msg);
   check('the slots close back to the pause menu', menus.backToPause);
   check('Options has four tabs that all render', Object.keys(menus.tabs).length === 4 && Object.values(menus.tabs).every((n) => n > 0) && menus.tabs.display >= 4, JSON.stringify(menus.tabs));
   check('keys can be rebound and reset', menus.rebound === 'I' && menus.reset === 'W', `${menus.rebound} → ${menus.reset}`);
+  const pf = menus.perf;
+  check('performance options change render distance and chunks, and reset', [80, 240].includes(pf.far) && pf.chunks > pf.chunks0 && pf.fps && [150, 450].includes(pf.farBack) && pf.chunksBack === pf.chunks0 && pf.fpsOff,
+    `far ${pf.far} m, ${pf.chunks0} → ${pf.chunks} chunks, back to ${pf.farBack} m / ${pf.chunksBack}`);
   check('Options goes back to the pause menu', menus.settingsBack);
   check('Main menu goes to the title, now with Continue', menus.title);
 

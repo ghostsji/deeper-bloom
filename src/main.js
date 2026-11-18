@@ -184,6 +184,8 @@ const settings = createSettings($('settings'), {
     player.setMouse({ sens: s.lookSens, invertY: s.invertY });
     tutorialOn = s.showTutorial !== false;
     setTooltips(s.showTips !== false);
+    world.setView({ view: s.viewDist ?? 150, scenery: s.sceneryDist ?? 150, chunk: s.chunkSize ?? 120 });
+    $('fps').hidden = !s.showFps;
     settingsNow = s;
     applyTheme();
   },
@@ -1335,8 +1337,15 @@ function updateSalvage(dt) {
 const clock = new THREE.Clock();
 const GARDEN_SECS = 10;
 let t = 0, gardenClock = 0;
+let fpsFrames = 0, fpsAt = performance.now();
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.05);
+  // The frame-rate counter (Options > Display).
+  fpsFrames++;
+  if (performance.now() - fpsAt >= 500) {
+    if (settingsNow.showFps) $('fps').textContent = `${Math.round(fpsFrames * 1000 / (performance.now() - fpsAt))} fps`;
+    fpsFrames = 0; fpsAt = performance.now();
+  }
   t += dt;  // the world keeps drifting behind menus; only the player stops
   if (state === 'playing') {
     playTime += dt;
@@ -1405,9 +1414,9 @@ function frame() {
   hudFx.text($('depth'), player.onFoot ? 'On deck' : depth < 0.3 ? 'Surface' : `${depth.toFixed(1)} m`, 'depth');
   updateVisor(dt);
   updateAudio(depth, camera.position.y > SURFACE_Y || state === 'title'); // menus aren't muffled
-  // The fog hides everything far off (underwater past ~150 m, in the night air past ~350 m), so
-  // don't draw it: a big world stays fast.
-  const far = camera.position.y > SURFACE_Y ? 450 : 150;
+  // The fog hides everything far off, so don't draw it: a big world stays fast. The render
+  // distance is an option (150 m by default; three times that in the open air).
+  const far = world.viewDistance * (camera.position.y > SURFACE_Y ? 3 : 1);
   if (camera.far !== far) { camera.far = far; camera.updateProjectionMatrix(); }
   // A wet phone: apps crash now and then while it's out.
   if (state === 'phone' && suit.phoneWet > 0.2 && Math.random() < suit.phoneWet * 0.06 * dt) {

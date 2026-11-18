@@ -40,7 +40,7 @@ Every new game generates its own world from a seed (saved with the game; older s
 ## Menus
 
 Main menu: Continue (your last game), New game (asks first if it would replace one), Load game, Save game, Options, Exit. Save slots (three) are files in the app's user data folder (`saves/slot1.json`...; in a browser, localStorage). Pause (Esc or P): Resume, Save game, Options, Main menu, Quit to desktop. Loading or starting over lands on a "Ready to dive" card, since the mouse can only be captured after a click.
-Options has four tabs: Sound, Echo's voice, Controls (look sensitivity, invert mouse Y, every key rebindable, swapping when a key is taken) and Display (fullscreen, start in fullscreen). Menu buttons have hover and click sounds, and the main menu has its own music.
+Options has four tabs: Sound, Echo's voice, Controls (look sensitivity, invert mouse Y, every key rebindable, swapping when a key is taken) and Display (fullscreen, start in fullscreen, and **Performance**: render distance 60-250 m underwater, three times that in the air, with the fog thickening to match; scenery distance 40-300 m, how far out coral, rocks, polyps and fish are kept; chunk size 40-240 m; and a frame-rate counter). Menu buttons have hover and click sounds, and the main menu has its own music.
 
 ## Help
 

@@ -12,6 +12,9 @@ const SAMPLE = "This is how I'll sound down here. Take your time. The reef isn't
 const TABS = [['sound', 'Sound'], ['voice', "Echo's voice"], ['controls', 'Controls'], ['display', 'Display & help']];
 const CONTROL_DEFAULTS = { lookSens: 1, invertY: false, bindings: {} };
 const HELP_DEFAULTS = { showTutorial: true, showTips: true };
+// Performance: how far the camera draws, how far out scenery (coral, rocks, polyps, fish) is
+// kept in the scene, and how big the scenery chunks are.
+export const PERF_DEFAULTS = { viewDist: 150, sceneryDist: 150, chunkSize: 120, showFps: false };
 // Hover help for the settings that aren't self-explanatory.
 const TIPS = {
   masterVol: 'Everything at once.', musicVol: 'The main menu theme and the reef pad.', sfxVol: 'Bubbles, creatures, the harpoon, the sea.', uiVol: 'Menu hover and click sounds.',
@@ -20,6 +23,9 @@ const TIPS = {
   roomSize: 'How big the space her voice echoes in sounds.', wet: 'How much of the echo you hear.', damping: 'How quickly the echo softens.',
   dry: 'How much of her plain voice you hear.', cutoff: 'Lower sounds more muffled and underwater.',
   lookSens: "How far the view turns when you move the mouse. Doesn't change the turn keys.",
+  viewDist: 'How far you can see underwater (three times this in the open air). Lower is faster; the fog closes in to match.',
+  sceneryDist: 'How far out coral, rocks, polyps, jellies and fish are kept. Lower is faster; things fade in closer.',
+  chunkSize: 'Scenery loads in square chunks this wide. Smaller chunks load tighter round you (less drawn); bigger ones swap less often.',
 };
 const DESKTOP = typeof window !== 'undefined' ? window.deeperBloom : null;
 
@@ -41,6 +47,9 @@ const SLIDERS = [
   ['dry', 'Dry level', 0, 1, 0.01, (v) => v.toFixed(2), 'fx'],
   ['cutoff', 'Lowpass cutoff', 500, 10000, 100, (v) => `${v} Hz`, 'fx'],
   ['lookSens', 'Look sensitivity', 0.2, 3, 0.05, (v) => `${v.toFixed(2)}×`, 'controls'],
+  ['viewDist', 'Render distance', 60, 250, 10, (v) => `${v} m`, 'perf'],
+  ['sceneryDist', 'Scenery distance', 40, 300, 10, (v) => `${v} m`, 'perf'],
+  ['chunkSize', 'Chunk size', 40, 240, 20, (v) => `${v} m`, 'perf'],
 ];
 const SOUND_KEYS = ['masterVol', 'musicVol', 'sfxVol', 'uiVol', 'muted'];
 
@@ -51,7 +60,7 @@ const applySound = (s) => setVolumes({ master: s.masterVol, music: s.musicVol, s
 export function loadSettings(onControls = () => {}) {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(KEY)) || {}; } catch { /* defaults */ }
-  const s = { ...VOICE_DEFAULTS, ...CONTROL_DEFAULTS, ...HELP_DEFAULTS, ...saved };
+  const s = { ...VOICE_DEFAULTS, ...CONTROL_DEFAULTS, ...HELP_DEFAULTS, ...PERF_DEFAULTS, ...saved };
   if (s.source === 'live' && !liveAvailable()) s.source = 'bundled';
   configure(s);
   applySound(s);
@@ -119,7 +128,11 @@ export function createSettings(el, { onBack, onControls = () => {}, sound = () =
         : '<p class="sub" data-tip="Restore all eight visor systems (SYS 100%).">Locked: restore every visor system to unlock new HUD colours.</p>'}
       <p class="sgroup">Help</p>
       <label class="scheck" data-tip="The task card in the top right, one step at a time. The phone's Guide tab has the full list."><input type="checkbox" data-help="showTutorial" ${s.showTutorial ? 'checked' : ''}> Show the tutorial</label>
-      <label class="scheck" data-tip="Like this one."><input type="checkbox" data-help="showTips" ${s.showTips ? 'checked' : ''}> Show tooltips when hovering</label>`,
+      <label class="scheck" data-tip="Like this one."><input type="checkbox" data-help="showTips" ${s.showTips ? 'checked' : ''}> Show tooltips when hovering</label>
+      <p class="sgroup">Performance</p>
+      ${rows('perf')}
+      <label class="scheck" data-tip="A small counter in the corner, to see what the settings above do."><input type="checkbox" data-help="showFps" ${s.showFps ? 'checked' : ''}> Show frame rate</label>
+      <div class="sbtns"><button type="button" class="secondary" data-reset="perf">Reset performance</button></div>`,
   };
   let winFs = false;
 
@@ -222,8 +235,9 @@ export function createSettings(el, { onBack, onControls = () => {}, sound = () =
     if (reset) {
       sound('click');
       if (reset === 'sound') for (const k of SOUND_KEYS) s[k] = VOICE_DEFAULTS[k];
-      if (reset === 'voice') s = { ...VOICE_DEFAULTS, ...Object.fromEntries(SOUND_KEYS.map((k) => [k, s[k]])), lookSens: s.lookSens, invertY: s.invertY, bindings: s.bindings };
+      if (reset === 'voice') s = { ...VOICE_DEFAULTS, ...Object.fromEntries(SOUND_KEYS.map((k) => [k, s[k]])), lookSens: s.lookSens, invertY: s.invertY, bindings: s.bindings, ...Object.fromEntries(Object.keys({ ...HELP_DEFAULTS, ...PERF_DEFAULTS }).map((k) => [k, s[k]])) };
       if (reset === 'controls') Object.assign(s, CONTROL_DEFAULTS, { bindings: {} });
+      if (reset === 'perf') Object.assign(s, PERF_DEFAULTS);
       save(); render();
     }
     if (e.target.closest('[data-back]')) { sound('back'); cancelWait(); stop(); onBack(); }

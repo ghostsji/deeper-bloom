@@ -95,7 +95,8 @@ const LIVE = WORLD_RADIUS - 55; // where life thins out before the atoll's walls
 // The world is big, so the things scattered over it live in square chunks. Chunks out of sight
 // (beyond the fog) are taken out of the scene (still marked hidden), so a far-off reef costs
 // nothing: three.js would otherwise walk every one of its objects every frame.
-const CHUNK = 120, chunks = new Map();
+let CHUNK = 120, sceneryReach = 150, viewDist = 150;
+const chunks = new Map();
 let chunkRoot = null;
 function chunkAt(x, z) {
   const i = Math.floor(x / CHUNK), j = Math.floor(z / CHUNK), k = `${i},${j}`;
@@ -109,8 +110,9 @@ function chunkAt(x, z) {
   return g;
 }
 function updateChunks(camera) {
-  // Underwater the fog ends sight at ~150 m; from above, the dark water hides the seabed's life.
-  const reach = Math.min(camera.far, 150) + CHUNK * 0.75, c = camera.position;
+  // The scenery distance (Options), never past what the camera draws; from above, the dark
+  // water hides the seabed's life anyway.
+  const reach = Math.min(camera.far, sceneryReach) + CHUNK * 0.75, c = camera.position;
   for (const g of chunks.values()) {
     const on = Math.hypot(g.userData.cx - c.x, g.userData.cz - c.z) < reach;
     if (on === g.visible) continue;
@@ -119,6 +121,16 @@ function updateChunks(camera) {
   }
 }
 const inChunk = (o) => o.parent?.userData?.chunk === true;
+/** Re-sorts all the scenery into chunks of a new size. */
+function setChunkSize(size) {
+  if (size === CHUNK || !chunkRoot) { CHUNK = size; return; }
+  const all = [];
+  for (const g of chunks.values()) { all.push(...g.children); chunkRoot.remove(g); }
+  chunks.clear();
+  CHUNK = size;
+  for (const o of all) chunkAt(o.position.x, o.position.z).add(o);
+  chunkRoot.updateMatrixWorld(true);
+}
 
 export function buildWorld(scene) {
   const time = { value: 0 };
@@ -178,6 +190,13 @@ export function buildWorld(scene) {
       for (const o of scannables) if (!inChunk(o) || Math.hypot(o.position.x - p.x, o.position.z - p.z) < r) nearList.push(o);
       return nearList;
     },
+    /** Performance options: render distance (m underwater), scenery distance (m), chunk size (m). */
+    setView({ view = viewDist, scenery = sceneryReach, chunk = CHUNK } = {}) {
+      viewDist = view; sceneryReach = scenery; setChunkSize(chunk);
+    },
+    get viewDistance() { return viewDist; },
+    get chunkCount() { return chunks.size; },
+    get chunksShown() { let n = 0; for (const g of chunks.values()) if (g.visible) n++; return n; },
     setBloom(v) { bloom = v; },
     setSilt(v) { silt = v; },
     setNight(v) { night = v; },
@@ -211,6 +230,8 @@ export function buildWorld(scene) {
       scene.fog.color.copy(above ? airFog : waterFog).lerp(above ? nightAir : nightWater, night * 0.8);
       scene.background.copy(scene.fog.color);
       scene.fog.density = (above ? 0.009 + storm * 0.016 : 0.03 - bloom * 0.008 + silt * 0.16 + storm * 0.004) * (1 - sonar * 0.6);
+      // A short render distance: thicken the fog so the world fades out before it's cut off.
+      scene.fog.density = Math.max(scene.fog.density, 2.4 / (above ? viewDist * 3 : viewDist));
       rain.update(dt, camera, above && storm > 0.15, storm);
       if (!above && silt > 0) { scene.fog.color.lerp(siltFog, silt * 0.75); scene.background.copy(scene.fog.color); }
       updateChunks(camera);
