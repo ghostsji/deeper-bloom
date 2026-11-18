@@ -48,31 +48,31 @@ export function generateLayout(seed, kelpPatches = []) {
   const L = {};
   // The outpost: flat sand, 22-38 m down, 110-210 m out.
   L.outpost = find(110, 210, (x, z) => { const d = depthAt(x, z); return d > 22 && d < 38 && flat(x, z, 9); }, 40);
-  // Wrecks: the first two hold the upgrades, the phone screen and two logs; four more lie further out.
-  L.wrecks = Array.from({ length: 6 }, (_, i) => ({ ...find(i < 2 ? 70 : 140, i < 2 ? 170 : WORLD_RADIUS - 60, (x, z) => depthAt(x, z) > 8 && flat(x, z, 4, 3), 35), rot: range(-Math.PI, Math.PI) }));
-  // Cables: three round the outpost (power cells lie by the first two), five elsewhere.
+  // Wrecks: the first two hold the upgrades, the phone screen and two logs; the rest lie further out.
+  L.wrecks = Array.from({ length: 14 }, (_, i) => ({ ...find(i < 2 ? 70 : 140, i < 2 ? 170 : WORLD_RADIUS - 60, (x, z) => depthAt(x, z) > 8 && flat(x, z, 4, 3), 35), rot: range(-Math.PI, Math.PI) }));
+  // Cables: three round the outpost (power cells lie by the first two), the rest elsewhere.
   L.cables = [
     ...Array.from({ length: 3 }, () => ({ ...find(14, 26, (x, z) => depthAt(x, z) > 6, 8, L.outpost), ang: range(-Math.PI, Math.PI) })),
-    ...Array.from({ length: 5 }, () => ({ ...find(60, WORLD_RADIUS - 60, (x, z) => depthAt(x, z) > 6, 30), ang: range(-Math.PI, Math.PI) })),
+    ...Array.from({ length: 17 }, () => ({ ...find(60, WORLD_RADIUS - 60, (x, z) => depthAt(x, z) > 6, 30), ang: range(-Math.PI, Math.PI) })),
   ];
-  L.currents = Array.from({ length: 7 }, () => {
+  L.currents = Array.from({ length: 24 }, () => {
     const a = range(0, Math.PI * 2);
     return { ...find(90, WORLD_RADIUS - 50, () => true, 40), r: range(12, 20), dir: [Math.cos(a), 0, Math.sin(a)], strength: range(4, 7) };
   });
-  L.sinkholes = Array.from({ length: 4 }, () => ({ ...find(60, WORLD_RADIUS - 70, (x, z) => depthAt(x, z) > 14 && flat(x, z, 6, 3), 50), r: range(6, 9), pull: 7 }));
-  L.vents = Array.from({ length: 16 }, (_, i) => ({ ...find(25, WORLD_RADIUS - 60, (x, z) => depthAt(x, z) > 6, 25), phase: i * 2.3 }));
+  L.sinkholes = Array.from({ length: 12 }, () => ({ ...find(60, WORLD_RADIUS - 70, (x, z) => depthAt(x, z) > 14 && flat(x, z, 6, 3), 50), r: range(6, 9), pull: 7 }));
+  L.vents = Array.from({ length: 56 }, (_, i) => ({ ...find(25, WORLD_RADIUS - 60, (x, z) => depthAt(x, z) > 6, 25), phase: i * 2.3 }));
   // App pods: Codex close to where you dive in, the others progressively further out.
   L.spots = {
     codex: find(10, 22, (x, z) => depthAt(x, z) > 4, 6, START),
     status: find(35, 70, (x, z) => depthAt(x, z) > 4, 12),
     goals: find(85, 140, (x, z) => depthAt(x, z) > 4, 20),
-    far: find(200, WORLD_RADIUS - 70, (x, z) => depthAt(x, z) > 4, 30),
+    far: find(200, Math.min(450, WORLD_RADIUS - 70), (x, z) => depthAt(x, z) > 4, 30), // far, but not a marathon
   };
   // Skills: in a far kelp patch (where eels nest).
   const patch = [...kelpPatches].filter((p) => Math.hypot(p.x, p.z - START.z) > 130 && Math.hypot(p.x, p.z) < WORLD_RADIUS - 60)
     .sort((a, b) => Math.hypot(a.x, a.z - START.z) - Math.hypot(b.x, b.z - START.z))[0];
   L.spots.skills = patch ? { x: patch.x + 1.5, z: patch.z } : find(140, 220, () => true, 20);
-  L.corrupt = Array.from({ length: 7 }, () => {
+  L.corrupt = Array.from({ length: 18 }, () => {
     const a = range(0, Math.PI * 2), shift = range(90, 160);
     return { ...find(60, WORLD_RADIUS - 70, () => true, 60), r: range(24, 42), ox: Math.cos(a) * shift, oz: Math.sin(a) * shift };
   });

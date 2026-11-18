@@ -45,6 +45,7 @@ test('the layout keeps things apart, puts the outpost deep and out, and is the s
   for (const c of L.cables.slice(0, 3)) assert.ok(Math.hypot(c.x - o.x, c.z - o.z) < 28);
   const near = (p) => Math.hypot(p.x, p.z - 24);
   assert.ok(near(L.spots.codex) < 25 && near(L.spots.codex) < near(L.spots.goals));
-  assert.equal(L.wrecks.length, 6);
-  assert.equal(L.vents.length, 16);
+  assert.equal(L.wrecks.length, 14);
+  assert.equal(L.vents.length, 56);
+  assert.ok(Math.hypot(L.spots.far.x, L.spots.far.z) <= 450, "the far pod stays a reasonable swim");
 });

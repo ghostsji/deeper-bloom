@@ -8,17 +8,17 @@ import { perk } from './progress.js';
 export const SEA_LEVEL = 26;
 export let SURFACE_Y = SEA_LEVEL;
 export function setWaterLevel(tide) { SURFACE_Y = SEA_LEVEL + tide; }
-export const WORLD_RADIUS = 420;   // the atoll's walls rise past this (it was 105)
+export const WORLD_RADIUS = 1190;  // the atoll's walls rise past this (8x the area of the old 420)
 export const REEF_RADIUS = 70;     // the familiar reef round Echo; procedural seabed beyond
 const FOG = 0x0a3a46;
 const SKY_FOG = 0x1a2c52;          // night air above the water
 const TINTS = { cyan: 0x5cf2d6, pink: 0xff8fd0, gold: 0xffc46b, violet: 0x8f7bff };
-const POLYP_COUNT = 260;
+const POLYP_COUNT = 1760;
 const POLYP_RESPAWN = 25;           // seconds before a gathered polyp glows again
 const BRIGHT_POLYP_CHANCE = 0.12;   // golden polyps are worth 5 Lumen
 const KELP_REGROW = 90;             // seconds for a harvested strand to grow back
-const FISH_COUNT = 56;
-const CORAL_COUNT = 420, ROCK_COUNT = 360, KELP_PATCHES = 95, JELLY_COUNT = 33;
+const FISH_COUNT = 256;
+const CORAL_COUNT = 2170, ROCK_COUNT = 2500, KELP_PATCHES = 634, JELLY_COUNT = 153;
 const FISH_RESPAWN = 60;
 const FISH_SKITTISH = { range: 4.5, speed: 2.5 }; // swim closer than this, faster than this, and they bolt
 const CATCH_REACH = 2.6;
@@ -92,6 +92,34 @@ function scatter(rMin, rMax, accept = () => true, tries = 30) {
 }
 const LIVE = WORLD_RADIUS - 55; // where life thins out before the atoll's walls
 
+// The world is big, so the things scattered over it live in square chunks. Chunks out of sight
+// (beyond the fog) are taken out of the scene (still marked hidden), so a far-off reef costs
+// nothing: three.js would otherwise walk every one of its objects every frame.
+const CHUNK = 120, chunks = new Map();
+let chunkRoot = null;
+function chunkAt(x, z) {
+  const i = Math.floor(x / CHUNK), j = Math.floor(z / CHUNK), k = `${i},${j}`;
+  let g = chunks.get(k);
+  if (!g) {
+    g = new THREE.Group();
+    g.userData = { chunk: true, cx: (i + 0.5) * CHUNK, cz: (j + 0.5) * CHUNK };
+    chunks.set(k, g);
+    chunkRoot.add(g);
+  }
+  return g;
+}
+function updateChunks(camera) {
+  // Underwater the fog ends sight at ~150 m; from above, the dark water hides the seabed's life.
+  const reach = Math.min(camera.far, 150) + CHUNK * 0.75, c = camera.position;
+  for (const g of chunks.values()) {
+    const on = Math.hypot(g.userData.cx - c.x, g.userData.cz - c.z) < reach;
+    if (on === g.visible) continue;
+    g.visible = on;
+    if (on) chunkRoot.add(g); else chunkRoot.remove(g);
+  }
+}
+const inChunk = (o) => o.parent?.userData?.chunk === true;
+
 export function buildWorld(scene) {
   const time = { value: 0 };
   scene.background = new THREE.Color(FOG);
@@ -103,6 +131,8 @@ export function buildWorld(scene) {
   sun.position.set(20, 60, 10);
   scene.add(sun);
 
+  chunkRoot = new THREE.Group();
+  scene.add(chunkRoot);
   addFloor(scene);
   const surface = addSurface(scene, time);
   const rays = addRays(scene, time);
@@ -117,7 +147,10 @@ export function buildWorld(scene) {
   const sky = addSky(scene);
   const fish = addSilverfin(scene);
   const satchel = addSatchel(scene);
+  chunkRoot.updateMatrixWorld(true);
   const bursts = [];
+  const nearList = [];
+  let nearAt = -1;
   const waterFog = new THREE.Color(FOG), airFog = new THREE.Color(SKY_FOG);
 
   // How brightly the reef glows: rises as you gather Lumen. 0..1
@@ -137,6 +170,14 @@ export function buildWorld(scene) {
     scannables,
     kelpPatches,
     kelpMesh: kelp.mesh,
+    /** Scannables close enough to matter (the scanner's raycast skips the rest of the world). */
+    nearScannables(p, r = 60) {
+      const now = performance.now();
+      if (now - nearAt < 400 && nearList.length) return nearList;
+      nearAt = now; nearList.length = 0;
+      for (const o of scannables) if (!inChunk(o) || Math.hypot(o.position.x - p.x, o.position.z - p.z) < r) nearList.push(o);
+      return nearList;
+    },
     setBloom(v) { bloom = v; },
     setSilt(v) { silt = v; },
     setNight(v) { night = v; },
@@ -172,6 +213,7 @@ export function buildWorld(scene) {
       scene.fog.density = (above ? 0.009 + storm * 0.016 : 0.03 - bloom * 0.008 + silt * 0.16 + storm * 0.004) * (1 - sonar * 0.6);
       rain.update(dt, camera, above && storm > 0.15, storm);
       if (!above && silt > 0) { scene.fog.color.lerp(siltFog, silt * 0.75); scene.background.copy(scene.fog.color); }
+      updateChunks(camera);
       sky.visible = above;
       rays.visible = !above && night < 0.6 && storm < 0.6;
       surface.under.visible = !above;
@@ -208,8 +250,10 @@ export function buildWorld(scene) {
           }
           continue;
         }
+        if (!p.parent.visible) continue;
         const glow = p.userData.bulb;
         glow.scale.setScalar(1 + Math.sin(t * 3 + p.userData.phase) * 0.12);
+        if (Math.abs(p.position.x - pos.x) > 8 || Math.abs(p.position.z - pos.z) > 8) continue;
         if (glow.getWorldPosition(_v).distanceTo(pos) < 1.7 * (1 + perk('magnet'))) { // Lumen magnet
           p.visible = false;
           p.userData.back = t + POLYP_RESPAWN * Math.max(0.3, 1 - perk('polypRegrow')); // Gentle hands
@@ -231,23 +275,37 @@ export function segDist(p, a, b) {
 }
 
 function addFloor(scene) {
-  const size = WORLD_RADIUS * 2 + 40, segs = 400;
-  const geo = new THREE.PlaneGeometry(size, size, segs, segs);
-  geo.rotateX(-Math.PI / 2);
-  const pos = geo.attributes.position, colors = [];
-  const sand = new THREE.Color(0x2f6a68), dark = new THREE.Color(0x0e2f36), dry = new THREE.Color(0x8c7f63), abyss = new THREE.Color(0x030b10), c = new THREE.Color();
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i), z = pos.getZ(i), y = floorY(x, z);
-    pos.setY(i, y);
-    const n = 0.5 + 0.5 * Math.sin(x * 0.21 + Math.cos(z * 0.17) * 2);
-    c.copy(sand).lerp(dark, Math.min(1, n * 0.6 + Math.max(0, y - 2) * 0.05));
-    if (y < -4) c.lerp(abyss, Math.min(1, (-4 - y) / 24)); // trenches fade to black
-    if (y > SURFACE_Y - 1.5) c.copy(dry).lerp(dark, n * 0.25); // dry island sand
-    colors.push(c.r, c.g, c.b);
+  // The seabed is one height grid (about 2.2 m a square) cut into tiles, so the tiles out of
+  // view are culled. Normals come from the whole grid, so tile seams light evenly.
+  const size = WORLD_RADIUS * 2 + 40, segs = 1100, T = 10, per = segs / T, step = size / segs, half = size / 2, n = segs + 1;
+  const H = new Float32Array(n * n);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) H[j * n + i] = floorY(i * step - half, j * step - half);
+  const h = (i, j) => H[Math.min(n - 1, Math.max(0, j)) * n + Math.min(n - 1, Math.max(0, i))];
+  const sand = new THREE.Color(0x2f6a68), dark = new THREE.Color(0x0e2f36), dry = new THREE.Color(0x8c7f63), abyss = new THREE.Color(0x030b10), c = new THREE.Color(), nv = new THREE.Vector3();
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 });
+  const m = per + 1, index = [];
+  for (let b = 0; b < per; b++) for (let a = 0; a < per; a++) { const p = b * m + a; index.push(p, p + m, p + 1, p + 1, p + m, p + m + 1); }
+  for (let tj = 0; tj < T; tj++) for (let ti = 0; ti < T; ti++) {
+    const pos = new Float32Array(m * m * 3), nor = new Float32Array(m * m * 3), col = new Float32Array(m * m * 3);
+    for (let b = 0; b < m; b++) for (let a = 0; a < m; a++) {
+      const i = ti * per + a, j = tj * per + b, x = i * step - half, z = j * step - half, y = h(i, j), k = (b * m + a) * 3;
+      pos[k] = x; pos[k + 1] = y; pos[k + 2] = z;
+      nv.set(h(i - 1, j) - h(i + 1, j), 2 * step, h(i, j - 1) - h(i, j + 1)).normalize();
+      nor[k] = nv.x; nor[k + 1] = nv.y; nor[k + 2] = nv.z;
+      const sn = 0.5 + 0.5 * Math.sin(x * 0.21 + Math.cos(z * 0.17) * 2);
+      c.copy(sand).lerp(dark, Math.min(1, sn * 0.6 + Math.max(0, y - 2) * 0.05));
+      if (y < -4) c.lerp(abyss, Math.min(1, (-4 - y) / 24)); // trenches fade to black
+      if (y > SURFACE_Y - 1.5) c.copy(dry).lerp(dark, sn * 0.25); // dry island sand
+      col[k] = c.r; col[k + 1] = c.g; col[k + 2] = c.b;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geo.setIndex(index);
+    geo.computeBoundingSphere();
+    scene.add(new THREE.Mesh(geo, mat));
   }
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  geo.computeVertexNormals();
-  scene.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 })));
 }
 
 // Rain: streaks falling round the camera when you're above the water in a storm.
@@ -295,14 +353,14 @@ function blotchTexture() {
 // Two one-sided sheets at the waterline: the bright shimmer you see from below, and the
 // dark night water you see from above (with the reef's glow faintly showing through).
 function addSurface(scene, time) {
-  const tex = blotchTexture(); tex.repeat.set(54, 54);
+  const tex = blotchTexture(); tex.repeat.set(54 * WORLD_RADIUS / 420, 54 * WORLD_RADIUS / 420);
   const geo = new THREE.PlaneGeometry(WORLD_RADIUS * 2.6, WORLD_RADIUS * 2.6);
   const under = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xa8fff4, map: tex, transparent: true, opacity: 0.7, depthWrite: false }));
   under.rotation.x = Math.PI / 2;
   under.position.y = SURFACE_Y;
   under.onBeforeRender = () => { tex.offset.set(time.value * 0.01, time.value * 0.006); };
   scene.add(under);
-  const topTex = tex.clone(); topTex.repeat.set(90, 90);
+  const topTex = tex.clone(); topTex.repeat.set(90 * WORLD_RADIUS / 420, 90 * WORLD_RADIUS / 420);
   const top = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
     color: 0x05202a, emissive: 0x1d7f80, emissiveMap: topTex, emissiveIntensity: 0.5,
     roughness: 0.6, metalness: 0, transparent: true, opacity: 0.92, depthWrite: false,
@@ -351,7 +409,7 @@ function addRocks(scene) {
     rock.scale.set(s * range(1, 1.8), s * range(0.5, 1), s);
     rock.position.set(x, floorY(x, z) + s * 0.2, z);
     rock.rotation.set(range(0, 3), range(0, 3), range(0, 3));
-    scene.add(rock);
+    chunkAt(x, z).add(rock);
   }
 }
 
@@ -396,7 +454,7 @@ function addCoral(scene) {
     cluster.scale.setScalar(range(0.7, 1.6));
     cluster.userData.scan = { species: isBrain ? 'brain' : 'branch', id: `coral:${i}` };
     scannables.push(cluster);
-    scene.add(cluster);
+    chunkAt(x, z).add(cluster);
   }
 }
 
@@ -534,14 +592,16 @@ function addJellies(scene) {
     const [jx, jz] = i < 9 ? scatter(10, 55) : scatter(55, LIVE);
     j.userData = { x: jx, z: jz, y: Math.min(SURFACE_Y - 3, floorY(jx, jz) + range(6, 14)), phase: range(0, 6) };
     j.userData.scan = { species: 'jelly', id: `jelly:${i}` };
+    j.position.set(jx, j.userData.y, jz);
     scannables.push(j);
-    scene.add(j);
+    chunkAt(jx, jz).add(j);
     jellies.push(j);
   }
   return {
     list: jellies,
     update(t) {
       for (const j of jellies) {
+        if (!j.parent.visible) continue; // out of sight: don't bother animating
         const u = j.userData, pulse = Math.sin(t * 1.4 + u.phase);
         j.position.set(u.x + Math.sin(t * 0.05 + u.phase) * 4, u.y + Math.sin(t * 0.7 + u.phase) * 1.2, u.z);
         j.scale.set(1 + pulse * 0.1, 1 - pulse * 0.12, 1 + pulse * 0.1);
@@ -572,7 +632,7 @@ function addPolyps(scene) {
     p.userData = { bulb, bright, glow, phase: range(0, 6), back: 0 };
     p.userData.scan = { species: 'polyp', id: `polyp:${i}` };
     scannables.push(p);
-    scene.add(p);
+    chunkAt(x, z).add(p);
     polyps.push(p);
   }
   return polyps;
@@ -654,7 +714,7 @@ function addSilverfin(scene) {
     g.userData = { home, vel: new THREE.Vector3(), phase: range(0, 6), flee: 0, back: 0, tail: t };
     g.userData.scan = { species: 'silverfin', id: `silverfin:${i}` };
     scannables.push(g);
-    scene.add(g);
+    chunkAt(x, z).add(g);
     list.push(g);
   }
   const want = new THREE.Vector3(), away = new THREE.Vector3(), fwd = new THREE.Vector3();
@@ -666,6 +726,7 @@ function addSilverfin(scene) {
           if (t >= u.back) { f.visible = true; f.position.copy(u.home); }
           continue;
         }
+        if (!f.parent.visible && u.flee <= 0) continue; // far off: they idle where they are
         const d = f.position.distanceTo(playerPos);
         if (d < FISH_SKITTISH.range * Math.max(0.3, 1 - perk('calm')) && playerSpeed > FISH_SKITTISH.speed) u.flee = 1.5; // Calm presence
         if (u.flee > 0) {

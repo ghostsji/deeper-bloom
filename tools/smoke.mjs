@@ -528,7 +528,7 @@ try {
     await sleep(300);
     return { pinged, thinner, rings, repaired, bitten, gained: lum1 - lum0, anglers: db.deep.anglers.length, corrupt: L.CORRUPT.length };`);
   check('a sonar ping reveals the map around you and thins the fog', deepR.pinged && deepR.thinner && deepR.rings);
-  check('swimming into a corrupted map region repairs it', deepR.corrupt === 7 && deepR.repaired);
+  check('swimming into a corrupted map region repairs it', deepR.corrupt === 18 && deepR.repaired);
   check("an anglerfish's lure is a trap", deepR.anglers > 0 && deepR.bitten > 0, `${deepR.anglers} anglerfish, -${deepR.bitten.toFixed(0)} health`);
   check('abyssal polyps pay far more Lumen', deepR.gained >= 12, `+${deepR.gained} Lumen`);
 

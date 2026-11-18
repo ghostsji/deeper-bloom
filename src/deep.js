@@ -8,9 +8,9 @@ import { floorY, WORLD_RADIUS, SURFACE_Y, worldSeed } from './world.js';
 
 export const DEEP = {
   floor: -14,          // floor height below which a spot counts as deep (40 m+ of water)
-  anglers: 12, lunge: 2.6, bite: 14, sight: 9, cooldown: 4,
-  polyps: 30, polypLumen: 12, polypRespawn: 120, reach: 1.6,
-  debris: 40,
+  anglers: 40, lunge: 2.6, bite: 14, sight: 9, cooldown: 4,
+  polyps: 100, polypLumen: 12, polypRespawn: 120, reach: 1.6,
+  debris: 140,
 };
 
 function rng(seed) {

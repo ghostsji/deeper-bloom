@@ -3,7 +3,7 @@
 // and a waypoint you set by tapping the map (it shows on the compass).
 import { floorY, WORLD_RADIUS, SURFACE_Y } from './world.js';
 
-export const MAP = { cells: 96, revealRadius: 32, image: 320, nearSpan: 240 };
+export const MAP = { cells: 256, revealRadius: 32, image: 900, nearSpan: 240 };
 const R = WORLD_RADIUS + 20;          // the map covers the whole atoll and a little beyond
 const SPAN = R * 2;
 
@@ -67,7 +67,8 @@ export function createReveal(cells = MAP.cells) {
     },
     load(str) {
       seen = new Uint8Array(cells * cells); count = 0;
-      if (typeof str === 'string') for (let c = 0; c < str.length; c++) {
+      // A map saved from a smaller world doesn't line up with this one: start it afresh.
+      if (typeof str === 'string' && str.length === Math.ceil((cells * cells) / 6)) for (let c = 0; c < str.length; c++) {
         const v = str.charCodeAt(c) - 48;
         for (let b = 0; b < 6; b++) if (v & (1 << b) && c * 6 + b < seen.length) { seen[c * 6 + b] = 1; count++; }
       }

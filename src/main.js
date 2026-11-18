@@ -1379,7 +1379,7 @@ function frame() {
   $('buildbar').hidden = !(state === 'playing' && placing && !lensOn);
   if (placing) renderBuildBar();
   // Thick silt stops the lens locking on.
-  const scan = state === 'playing' && lensOn ? research.update(dt, camera, world.scannables, scanHeld && silt < 0.4) : null;
+  const scan = state === 'playing' && lensOn ? research.update(dt, camera, world.nearScannables(camera.position), scanHeld && silt < 0.4) : null;
   if (scan && silt >= 0.4) scan.status = 'Too much silt to lock on';
   $('scanlabel').hidden = !scan;
   $('scanring').style.setProperty('--p', scan ? scan.progress : 0);
@@ -1405,8 +1405,9 @@ function frame() {
   hudFx.text($('depth'), player.onFoot ? 'On deck' : depth < 0.3 ? 'Surface' : `${depth.toFixed(1)} m`, 'depth');
   updateVisor(dt);
   updateAudio(depth, camera.position.y > SURFACE_Y || state === 'title'); // menus aren't muffled
-  // The fog hides everything far off underwater, so don't draw it (a big world stays fast).
-  const far = camera.position.y > SURFACE_Y ? 900 : 150;
+  // The fog hides everything far off (underwater past ~150 m, in the night air past ~350 m), so
+  // don't draw it: a big world stays fast.
+  const far = camera.position.y > SURFACE_Y ? 450 : 150;
   if (camera.far !== far) { camera.far = far; camera.updateProjectionMatrix(); }
   // A wet phone: apps crash now and then while it's out.
   if (state === 'phone' && suit.phoneWet > 0.2 && Math.random() < suit.phoneWet * 0.06 * dt) {
