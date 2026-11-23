@@ -1,6 +1,7 @@
 // All sound is synthesized with Web Audio, like Deep Bloom: no asset files to load or license.
 // In the water the pad uses Deep Bloom's "Sunlit reef" progression; the main menu has its
-// own slower theme. Everything sits under a lowpass that closes as you swim deeper.
+// own slower theme. Everything sits under a lowpass that closes as you swim deeper, and
+// underwater the music itself warps (wobbling pitch, grit and a booming, sweeping filter).
 
 const THEMES = {
   reef: {
@@ -21,6 +22,7 @@ let theme = THEMES.reef;
 const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
 let ctx = null, master, water, music, sfx, echoIn, ui, visor;
+let musicDry, musicWet, warpTone, warpLfo, warpAmount = 0; // the underwater music warp
 // The player's volumes (Settings → Sound), each 0..1, on top of the mix levels below.
 let vol = { master: 1, music: 1, sfx: 1, ui: 1, muted: false };
 let paused = false;
@@ -33,7 +35,30 @@ export function initAudio() {
   master = ctx.createGain();
   water = ctx.createBiquadFilter(); water.type = 'lowpass'; water.frequency.value = 2400; water.Q.value = 0.4;
   water.connect(master); master.connect(ctx.destination);
-  music = ctx.createGain(); music.connect(water);
+  music = ctx.createGain();
+  // Underwater the music warps: two wobbling delay lines bend the pitch (like a warped tape
+  // heard through water), a soft overdrive grits it up, and a resonant, slowly sweeping lowpass
+  // makes it boom. Above the water (and on the menus) it's clean: the dry path.
+  musicDry = ctx.createGain(); musicWet = ctx.createGain(); musicWet.gain.value = 0;
+  music.connect(musicDry); musicDry.connect(water);
+  const shaper = ctx.createWaveShaper(), curve = new Float32Array(1024);
+  for (let i = 0; i < curve.length; i++) { const x = (i / (curve.length - 1)) * 2 - 1; curve[i] = Math.tanh(x * 3.2) / Math.tanh(3.2); }
+  shaper.curve = curve; shaper.oversample = '2x';
+  const drive = ctx.createGain(); drive.gain.value = 1.8;
+  warpTone = ctx.createBiquadFilter(); warpTone.type = 'lowpass'; warpTone.frequency.value = 850; warpTone.Q.value = 4;
+  for (const [base, rate, depth, level] of [[0.018, 0.33, 0.006, 0.6], [0.027, 0.21, 0.009, 0.45]]) {
+    const dl = ctx.createDelay(0.1); dl.delayTime.value = base;
+    const lfo = ctx.createOscillator(), amt = ctx.createGain();
+    lfo.frequency.value = rate; amt.gain.value = depth;
+    lfo.connect(amt); amt.connect(dl.delayTime); lfo.start();
+    const g = ctx.createGain(); g.gain.value = level;
+    music.connect(dl); dl.connect(g); g.connect(drive);
+  }
+  drive.connect(shaper); shaper.connect(warpTone); warpTone.connect(musicWet); musicWet.connect(water);
+  // The lowpass sweeps slowly, so the music swells and sinks like it's coming through waves.
+  warpLfo = ctx.createOscillator(); warpLfo.frequency.value = 0.13;
+  const sweep = ctx.createGain(); sweep.gain.value = 260;
+  warpLfo.connect(sweep); sweep.connect(warpTone.frequency); warpLfo.start();
   sfx = ctx.createGain(); sfx.connect(water);
   ui = ctx.createGain(); ui.connect(master); // menu sounds skip the water filter
   visor = ctx.createGain(); visor.connect(master); // the visor's electronics are in your helmet: not muffled either
@@ -75,6 +100,11 @@ export function updateAudio(depth, above = false) {
   if (!ctx) return;
   const now = ctx.currentTime;
   water.frequency.setTargetAtTime((above ? 12000 : Math.max(500, 2600 - depth * 70)) * (1 - earLevel * 0.75), now, 0.5);
+  // The music warp: strong as soon as you're under, stronger and darker the deeper you go.
+  warpAmount = above ? 0 : Math.min(1, 0.8 + depth * 0.01);
+  musicDry.gain.setTargetAtTime(1 - warpAmount * 0.85, now, 0.25);
+  musicWet.gain.setTargetAtTime(warpAmount * 0.9, now, 0.25);
+  warpTone.frequency.setTargetAtTime(Math.max(380, 900 - depth * 12), now, 0.5);
 
   const th = theme;
   if (now >= nextChord) {
@@ -347,6 +377,7 @@ export const audioReady = () => !!ctx;
 export const audioState = () => ({
   running: ctx?.state === 'running', music: Object.keys(THEMES).find((k) => THEMES[k] === theme),
   volumes: { ...vol }, masterGain: master ? +master.gain.value.toFixed(3) : null,
+  musicWarp: +warpAmount.toFixed(2), musicWet: musicWet ? +musicWet.gain.value.toFixed(2) : 0,
 });
 
 // ---- Visor electronics -------------------------------------------------------------

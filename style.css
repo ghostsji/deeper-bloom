@@ -325,7 +325,7 @@ kbd { display: inline-block; min-width: 1em; margin: 0 1px; padding: 0 6px; bord
 .subtitle { border-radius: 2px; border-left: 3px solid var(--cyan); background: linear-gradient(90deg, rgba(3, 17, 26, .78), rgba(3, 17, 26, .5));
   clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%); }
 .subtitle b { font-family: var(--mono); color: var(--cyan); letter-spacing: .2em; }
-.hint, .lenshint { font-family: var(--mono); letter-spacing: .08em; }
+.lenshint { font-family: var(--mono); letter-spacing: .08em; }
 .crosshair { width: 4px; height: 4px; margin: -2px 0 0 -2px; }
 .crosshair::before { content: ''; position: absolute; left: -12px; top: -12px; width: 28px; height: 28px;
   background: linear-gradient(var(--hud-line), var(--hud-line)) 0 0 / 7px 1px no-repeat, linear-gradient(var(--hud-line), var(--hud-line)) 0 0 / 1px 7px no-repeat,
@@ -611,3 +611,33 @@ body[data-theme="green"] { --cyan: #7CFF8A; --hud-line: rgba(124, 255, 138, .38)
 /* Frame-rate counter (Options > Display > Show frame rate). */
 .fps { position: fixed; left: 50%; bottom: 8px; transform: translateX(-50%); z-index: 60; pointer-events: none;
   font: 600 11px/1 ui-monospace, Consolas, monospace; letter-spacing: 0.1em; color: #9ff6e6; opacity: 0.75; }
+
+/* ---- Polish pass: readability, focus, accessibility ---- */
+/* Controls hint: your own keys as chips, one calm line, gone after the first moments. */
+.hint { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; max-width: min(94vw, 1080px); width: max-content; font: 500 14px 'DM Sans', sans-serif; letter-spacing: 0; color: #cfe6e6;
+  padding: 8px 16px; border-radius: 12px; background: rgba(3, 17, 26, .62); text-shadow: none; }
+.hint:empty { display: none; }
+.hint span { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.hint kbd { min-width: 22px; padding: 2px 6px; border-radius: 6px; border: 1px solid rgba(92, 242, 214, .45); background: rgba(92, 242, 214, .12);
+  color: #e6f4f2; font: 600 12px 'DM Sans', sans-serif; text-align: center; margin-right: 3px; }
+/* Phone tabs: eight apps in a narrow bar; labels never run into each other. */
+.phone-tabs button { padding: 0 1px; }
+.phone-tabs button span { display: block; max-width: 100%; font-size: 10px; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Keyboard focus you can see, everywhere. */
+button:focus-visible, select:focus-visible, input:focus-visible, [tabindex]:focus-visible { outline: 2px solid #5cf2d6; outline-offset: 3px; }
+.mm-items button:focus-visible { outline: 2px solid #5cf2d6; outline-offset: 4px; border-radius: 6px; }
+/* Reduce flashing and shaking (Options, or the system's reduced-motion setting): every flicker
+   becomes a slow fade, white-out flashes are dropped, and nothing shakes. */
+html.calm *, html.calm *::before, html.calm *::after { animation-duration: 2.4s !important; animation-timing-function: ease-in-out !important; transition-duration: .3s !important; }
+html.calm .lightning, html.calm .zap-flash, html.calm .visor .v-flash { display: none !important; }
+html.calm .visor.fuzz .v-static { opacity: .25 !important; animation: none !important; }
+html.calm.jolt body, html.calm body { animation: none !important; }
+
+/* Riding the current (fast travel): the Map app's list, and the fade while you travel. */
+.phone .travel { margin: 4px 0 10px; padding: 10px 12px; border-radius: 14px; background: rgba(92, 242, 214, .06); border: 1px solid rgba(92, 242, 214, .18); }
+.phone .travel-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.phone .travel-list button { display: inline-flex; gap: 8px; align-items: baseline; }
+.phone .travel-list button span { color: var(--muted); font-weight: 400; }
+.travelfade { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; pointer-events: none; opacity: 0; transition: opacity .6s;
+  background: radial-gradient(ellipse at center, rgba(6, 40, 48, .92), #01080b); color: #9ff6e6; font: 500 18px 'DM Sans', sans-serif; letter-spacing: .02em; }
+.travelfade.on { opacity: 1; }

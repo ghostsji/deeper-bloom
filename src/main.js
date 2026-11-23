@@ -18,7 +18,7 @@ import { createResearch, RESEARCH, SPECIES } from './research.js';
 import { createPhone } from './phone.js';
 import { ECHO_LINES } from './echo-lines.js';
 import { speakLine, pauseVoice } from './voice.js';
-import { createSettings } from './settings.js';
+import { createSettings, systemCalm } from './settings.js';
 import { createMenus } from './menus.js';
 import { createTutorial, STEPS } from './tutorial.js';
 import { createSystems } from './hud-systems.js';
@@ -186,6 +186,10 @@ const settings = createSettings($('settings'), {
     setTooltips(s.showTips !== false);
     world.setView({ view: s.viewDist ?? 150, scenery: s.sceneryDist ?? 150, chunk: s.chunkSize ?? 120 });
     $('fps').hidden = !s.showFps;
+    hudFx.setReadable(s.readableText);
+    const calm = s.reduceFlashing ?? systemCalm();
+    document.documentElement.classList.toggle('calm', calm);
+    world.setCalm(calm);
     settingsNow = s;
     applyTheme();
   },
@@ -562,6 +566,10 @@ const phone = createPhone($('phone'), {
   hasApp: (id) => salvage.found(id),
   reveal,
   mapView: () => mapView(),
+  travelSpots: () => travelSpots(),
+  travelBlock: () => travelBlock(),
+  onTravel: (id) => travel(id),
+  get travelCost() { return TRAVEL.power; },
   onWaypoint: (w) => { waypoint = w; uiSound('click'); save(); },
   phoneFixed: () => phoneFixed,
   onShard: () => click(),
@@ -696,7 +704,20 @@ function startGame() {
   echoSay('arrive');
   echoSay('phone');
   echoSay('harpoon');
-  setTimeout(() => $('hint').classList.add('gone'), 9000);
+  showHint();
+}
+// The controls you need first, with your own key bindings, for the first moments of a dive.
+// The tutorial and the phone's Guide cover the rest.
+let hintTimer = 0;
+function showHint() {
+  const k = (id) => `<kbd>${keyName(id)}</kbd>`;
+  $('hint').innerHTML = [
+    `${k('forward')}${k('left')}${k('back')}${k('right')} swim`, `${k('rise')} up`, `${k('sink')} down`,
+    `${k('dash')} dash`, `${k('phone')} phone`, `${k('pause')} pause`,
+  ].map((x) => `<span>${x}</span>`).join('');
+  $('hint').classList.remove('gone');
+  clearTimeout(hintTimer);
+  hintTimer = setTimeout(() => $('hint').classList.add('gone'), 14000);
 }
 
 const hasSave = () => { try { return !!localStorage.getItem(SAVE_KEY); } catch { return false; } };
@@ -829,7 +850,7 @@ function updateTutorial() {
     <b>${step.title}${pr.need > 1 ? ` <small>${Math.floor(pr.have)} / ${pr.need}</small>` : ''}</b>
     <p>${step.how(keyName)}</p>
     ${pr.need > 1 ? `<div class="bar" style="--v:${pr.have / pr.need}"></div>` : ''}
-    <small class="tut-foot">${keyName('phone')} → Guide for every how-to, or to skip this</small>`;
+    <small class="tut-foot">Every how-to, or skip the tutorial: ${keyName('phone')}, then Guide</small>`;
   if (html !== lastCard) { card.innerHTML = html; lastCard = html; }
   card.classList.toggle('flash', performance.now() - flashT < 900);
 }
@@ -905,6 +926,51 @@ function mapView() {
     glitch: 1 - systems.integrity,
     reef: reef.model.cells(), reefRestored: reef.model.restored,
   };
+}
+
+// ---- Riding the current (fast travel) ---------------------------------------------
+// The atoll is 2.4 km across. Once Navigation is back, the Map app can plot the reef's currents
+// to somewhere you know (Echo, your rafts, the outpost) and you ride them there, for a bite of
+// visor power. Close places aren't offered: you can swim those.
+const TRAVEL = { power: 6, minPower: 10, minDist: 60 };
+function travelSpots() {
+  const here = camera.position, out = [];
+  out.push({ id: 'echo', name: 'Echo', x: 0, z: 5, y: world.echo.position.y + 1.5 });
+  const rafts = [];
+  builder.each('raft', (pc) => { const w = pc.mesh.getWorldPosition(new THREE.Vector3()); if (!rafts.some((r) => Math.hypot(r.x - w.x, r.z - w.z) < 14)) rafts.push({ x: w.x, z: w.z }); });
+  rafts.forEach((r, i) => out.push({ id: `raft${i}`, name: rafts.length > 1 ? `Raft ${i + 1}` : 'Your raft', x: r.x + 3, z: r.z + 3, y: SURFACE_Y - 0.6 }));
+  if (reveal.seen(OUTPOST.x, OUTPOST.z)) out.push({ id: 'outpost', name: 'The outpost', x: OUTPOST.x + 8, z: OUTPOST.z, y: floorY(OUTPOST.x + 8, OUTPOST.z) + 4 });
+  return out.map((s) => ({ ...s, dist: Math.round(Math.hypot(s.x - here.x, s.z - here.z)) })).filter((s) => s.dist >= TRAVEL.minDist);
+}
+/** Why you can't ride the current right now, or null if you can. */
+function travelBlock() {
+  if (!systems.online('nav')) return 'Navigation is offline. Build a research station to bring it back.';
+  if (suit.power < TRAVEL.minPower) return `Needs ${TRAVEL.minPower}% visor power. Charge it with Lumen or sunlight first.`;
+  if (player.stunned) return 'You\'re stunned. Wait for your hands to work.';
+  return null;
+}
+let travelling = false;
+function travel(id) {
+  const s = travelSpots().find((x) => x.id === id);
+  if (!s || travelBlock() || travelling) return false;
+  travelling = true;
+  suit.drain(TRAVEL.power);
+  engage();
+  const fade = $('travelfade');
+  fade.textContent = `Riding the current to ${s.name}…`;
+  fade.classList.add('on');
+  bubbleSound();
+  setTimeout(() => {
+    camera.position.set(s.x, s.y, s.z);
+    lastCamY = camera.position.y; // a jump in height isn't a dive: don't hurt your ears
+    reveal.reveal(s.x, s.z);
+    env.phase = (env.phase + s.dist / 2400 * 0.04) % 1; // the ride takes a little time
+    tutorial.note?.('travel');
+    setTimeout(() => { fade.classList.remove('on'); travelling = false; }, 350);
+    toast(`You ride the current ${s.dist} m to ${s.name}.`, { color: '#9ff6e6' });
+    save();
+  }, 650);
+  return true;
 }
 
 // ---- Visor HUD ------------------------------------------------------------------
@@ -1338,6 +1404,7 @@ const clock = new THREE.Clock();
 const GARDEN_SECS = 10;
 let t = 0, gardenClock = 0;
 let fpsFrames = 0, fpsAt = performance.now();
+let depthEarned = false; // Into the deep counts once you've gone below where you start
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.05);
   // The frame-rate counter (Options > Display).
@@ -1355,11 +1422,13 @@ function frame() {
     if (!player.onFoot) progress.track('meters', Math.min(camera.position.distanceTo(before), 2));
     if (camera.position.y < SURFACE_Y) {
       progress.track('underwater', dt);
-      progress.trackMax('depth', Math.round(SURFACE_Y - camera.position.y));
+      const depthNow = SURFACE_Y - camera.position.y;
+      if (depthNow > 23) depthEarned = true; // deeper than where you start
+      if (depthEarned) progress.trackMax('depth', Math.round(depthNow));
     }
     world.gather(camera.position, t, gather);
     if (camera.position.distanceTo(world.echo.position) < 7) echoSay('meet');
-    if (atSurface()) { echoSay('surface'); tutorial.note('surface'); }
+    if (atSurface()) { echoSay('surface'); tutorial.note('surface'); depthEarned = true; }
     if (player.onFoot) tutorial.note('deck');
     updateSalvage(dt);
     updateStun();

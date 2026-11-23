@@ -48,6 +48,7 @@ const GUIDES = [
   ['Breath, health and food', () => 'Breath drains underwater and refills at the surface; when it runs out you lose health. Food drains slowly. Health heals only while you\'re fed and have breath. The bars bottom left show all three.'],
   ['Food and cooking', () => `Underwater, <kbd>Left-click</kbd> a silverfin in front of you (glide in slowly, or it bolts) or the kelp you're aiming at. ${k('eat')} eats. Raw food is better cooked: press ${k('use')} at a cook fire. A kelp farm grows kelp for you; press ${k('use')} to collect it.`],
   ['The harpoon and eels', () => `${k('harpoon')} raises the harpoon and <kbd>Left-click</kbd> fires; the spear reels back before the next shot. Each shot wears it down; repair it at a workbench with kelp (${k('use')}). Blighted eels guard some kelp patches. Three hits cure one, and it drops Lumen and eel meat. They can't follow you onto a raft.`],
+  ['Ride the current (fast travel)', () => 'The atoll is 2.4 km across. Once Navigation is back (build a research station), the Map app lists places you know: Echo, your rafts and the outpost once you have found it. Pick one to ride the reef’s currents there. Each ride costs 6% visor power and needs at least 10%. Places closer than 60 m are not listed: swim those.'],
   ['Missing phone apps', () => 'The flood washed the Codex, Status, Goals and Skills apps out of your phone. Each one\'s module lies on the reef in a salvage pod: a blinking capsule under a thin beam of light that reaches the surface. Pods ping louder as you get close, and once Navigation is restored they show on the compass. Swim into a pod to put its app back. Goals still pay Bloom points while the apps are missing.'],
   ['Visor battery', () => `Your HUD runs on a battery that drains as you play. At 30% navigation shuts off, then the depth gauge (20%), the Lumen and Data readouts (12%) and your vitals (5%); at 0% Echo's subtitles go too. It recharges fast on a raft deck and slowly while you tread water at the surface, or you can buy ${POWER.lumenCharge}% for ${POWER.lumenCost} Lumen on the Status app. Two power cells lie in salvage pods next to live cables: each makes the battery last longer.`],
   ['Pressure on the glass', () => `Below ${PRESSURE.safeDepth} m, deep water strains your cracked visor. The glass groans, the GLASS STRAIN bar under your depth fills, and new cracks spread across it. When it's full the visor leaks: water fills it from the bottom and you run out of breath much faster. Go shallower to ease it, surface to drain the water, and fix the Visor seal (finish 2 research projects) to stop it for good.`],
@@ -282,12 +283,22 @@ export function createPhone(el, g) {
   function renderMap() {
     const v = g.mapView(), pct = Math.round(g.reveal.explored * 100);
     return `<div class="row"><span class="label">Map</span><span class="small muted">${pct}% explored · reef ${Math.round((v.reefRestored || 0) * 100)}% restored</span></div>
+      ${renderTravel()}
       <canvas class="map" data-map width="680" height="680" data-tip="Tap to set a waypoint (it shows on your compass). Fog hides what you haven't swum near yet."></canvas>
       <div class="row">
         <button type="button" class="btn small ghost" data-zoom>${mapZoom === 'all' ? 'Zoom in' : 'Whole atoll'}</button>
         ${v.waypoint ? `<span class="small gold">Waypoint ${Math.round(Math.hypot(v.waypoint.x - v.you.x, v.waypoint.z - v.you.z))} m</span><button type="button" class="btn small ghost" data-clearwp>Clear</button>` : '<span class="small muted">Tap the map to set a waypoint</span>'}
       </div>
       <p class="sub"><span class="mk" style="background:#F4EEE6"></span>Echo <span class="mk" style="background:#5CF2D6"></span>pods <span class="mk sq" style="background:#C9A36A"></span>rafts <span class="mk sq" style="background:#FF9A5C"></span>outpost <span class="mk sq" style="background:#B8A07A"></span>wrecks. Dashed rings: Echo's signal and your buoys' reach.</p>`;
+  }
+  // Riding the current: fast travel to places you know, once Navigation is back.
+  function renderTravel() {
+    const spots = g.travelSpots?.() || [], block = g.travelBlock?.();
+    if (!spots.length && !block) return '';
+    return `<div class="travel"><div class="row"><span class="label">Ride the current</span><span class="small muted">${g.travelCost}% visor power</span></div>
+      ${block ? `<p class="small muted">${block}</p>` : spots.length
+        ? `<div class="travel-list">${spots.map((s) => `<button type="button" class="btn small ghost" data-travel="${s.id}" data-tip="Ride the reef's currents to ${s.name} (${s.dist} m)."><b>${s.name}</b><span>${s.dist} m</span></button>`).join('')}</div>`
+        : '<p class="small muted">Nowhere far enough to ride to yet. Build a raft out on the water, or find the outpost.</p>'}</div>`;
   }
   let mapTimer = 0;
   function paintMap() {
@@ -329,7 +340,8 @@ export function createPhone(el, g) {
       const gone = missing(b.dataset.tab);
       b.toggleAttribute('aria-current', b.dataset.tab === tab);
       b.classList.toggle('missing', gone);
-      b.querySelector('span').textContent = gone ? 'Missing' : b.dataset.name;
+      b.querySelector('span').textContent = gone ? 'Lost' : b.dataset.name;
+      b.setAttribute('aria-label', gone ? `${b.dataset.name} (lost: find its salvage pod)` : b.dataset.name);
       b.dataset.tip = gone ? `<b>${b.dataset.name}: missing</b><br>The flood washed this app away. Find its salvage pod on the reef to get it back.` : TAB_TIPS[b.dataset.tab]();
     });
     const scroll = body.scrollTop;
@@ -354,6 +366,7 @@ export function createPhone(el, g) {
     if (!b) return;
     if ('zoom' in b.dataset) { mapZoom = mapZoom === 'all' ? 'near' : 'all'; render(); return; }
     if ('clearwp' in b.dataset) { g.onWaypoint(null); render(); return; }
+    if (b.dataset.travel) { g.onTravel(b.dataset.travel); return; }
     // Water in the phone: sometimes a tap lands on the wrong button.
     const wet = g.suit.phoneWet;
     if (wet > 0.2 && !b.dataset.redirected && Math.random() < wet * 0.35) {

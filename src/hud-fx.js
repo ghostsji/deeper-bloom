@@ -7,6 +7,7 @@ import { glitchSound, staticSound, rebootSound, setVisorHum } from './audio.js';
 // through text().
 
 const GLYPHS = '░▒▓#%&@$<>/\\|=+*¤§';
+const SETTLE = 1.4; // seconds before a new subtitle decodes
 const scramble = (s, p) => s.replace(/\S/g, (ch) => (Math.random() < p ? GLYPHS[(Math.random() * GLYPHS.length) | 0] : ch));
 
 // Shattered glass, the same every time (seeded): at each impact point a crushed core of shards,
@@ -138,11 +139,15 @@ export function createHudFx(root, systems) {
     const t = texts.get(el);
     const sys = t.sys && !systems.online(t.sys) ? t.sys : null;
     // Damaged readouts break up badly in a burst and a little the rest of the time.
-    const p = Math.max(!sys ? 0 : bursts[sys].until > now ? 0.55 : sys === 'comms' ? 0.1 : 0, t.sys === 'comms' ? Math.max(air * 0.5, (1 - signal) * 0.6) : 0);
+    let p = Math.max(!sys ? 0 : bursts[sys].until > now ? 0.55 : sys === 'comms' ? 0.1 : 0, t.sys === 'comms' ? Math.max(air * 0.5, (1 - signal) * 0.6) : 0);
+    // Echo's lines arrive broken up, then decode: after a moment only a little noise is left,
+    // so what she says can always be read. With Readable text on, nothing is scrambled.
+    if (t.settle && now - t.at > SETTLE) p = Math.min(p, 0.04);
+    if (readable) p = 0;
     const shown = p ? scramble(t.text, p) : t.text;
     if (t.prefix) el.innerHTML = `${t.prefix}${shown.replace(/</g, '&lt;')}`; else el.textContent = shown;
   }
-  let signal = 1;
+  let signal = 1, readable = false;
   let now = 0, air = 0, phantomUntil = 0, shortUntil = 0, lieDepth = null;
   function shortCircuit() {
     const kind = ['mirror', 'swap', 'lie'][(Math.random() * 3) | 0];
@@ -159,7 +164,7 @@ export function createHudFx(root, systems) {
     if (lieDepth && sys === 'depth') value = lieDepth;
     const t = texts.get(el);
     if (t && t.text === value && t.prefix === prefix) return;
-    texts.set(el, { text: value, prefix, sys });
+    texts.set(el, { text: value, prefix, sys, at: now, settle: el.id === 'subtitle', settled: false });
     paint(el);
   }
 
@@ -268,9 +273,12 @@ export function createHudFx(root, systems) {
       heatEl.classList.toggle('hot', !!st.overheated);
     },
     refresh() { setParts(); for (const el of texts.keys()) paint(el); },
+    /** Readable text (Options): HUD text is never scrambled. The rest of the damage still shows. */
+    setReadable(v) { readable = !!v; for (const el of texts.keys()) paint(el); },
     // info: { heading, points: [{ kind, bearing, dist }], playing }
     update(dt, t, info) {
       now = t;
+      for (const [el, tx] of texts) if (tx.settle && !tx.settled && now - tx.at > SETTLE) { tx.settled = true; paint(el); }
       if (!booted) { setParts(); booted = true; }
       const damage = 1 - systems.integrity;
       for (const s of SYSTEMS) {

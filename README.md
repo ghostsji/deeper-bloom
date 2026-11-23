@@ -40,7 +40,7 @@ Every new game generates its own world from a seed (saved with the game; older s
 ## Menus
 
 Main menu: Continue (your last game), New game (asks first if it would replace one), Load game, Save game, Options, Exit. Save slots (three) are files in the app's user data folder (`saves/slot1.json`...; in a browser, localStorage). Pause (Esc or P): Resume, Save game, Options, Main menu, Quit to desktop. Loading or starting over lands on a "Ready to dive" card, since the mouse can only be captured after a click.
-Options has four tabs: Sound, Echo's voice, Controls (look sensitivity, invert mouse Y, every key rebindable, swapping when a key is taken) and Display (fullscreen, start in fullscreen, and **Performance**: render distance 60-250 m underwater, three times that in the air, with the fog thickening to match; scenery distance 40-300 m, how far out coral, rocks, polyps and fish are kept; chunk size 40-240 m; and a frame-rate counter). Menu buttons have hover and click sounds, and the main menu has its own music.
+Options has four tabs: Sound, Echo's voice, Controls (look sensitivity, invert mouse Y, every key rebindable, swapping when a key is taken) and Display (fullscreen, start in fullscreen, and **Performance**: render distance 60-250 m underwater, three times that in the air, with the fog thickening to match; scenery distance 40-300 m, how far out coral, rocks, polyps and fish are kept; chunk size 40-240 m; and a frame-rate counter). Menu buttons have hover and click sounds, and the main menu has its own music. **Accessibility** (Display & help): *Readable text* stops Echo's lines and the visor readouts being scrambled (the cracks, static and hum stay); *Reduce flashing and shaking* turns lightning, shocks, reboots and glitches into soft fades with no screen shake, and follows the system's reduced-motion setting until you choose. Even with Readable text off, Echo's lines arrive broken up and decode after a moment, so what she says can always be read. Every button shows a visible keyboard focus ring. Underwater the music warps (two wobbling delay lines bend the pitch like a warped tape, a soft overdrive grits it up, and a resonant lowpass sweeps slowly and darkens with depth); above the water and on the menus it plays clean.
 
 ## Help
 
@@ -117,3 +117,9 @@ If the browser refuses pointer lock (embedded previews), the free cursor looks a
 Three.js 0.170 is installed locally (no CDN), so it runs offline. `electron/main.cjs` is the desktop shell (serves the game from `app://game/`, no menu bar so Ctrl+W can't close it).
 
 The Flutter shell (`../deeper_bloom_shell`) was an experiment and is retired: its menus now live in the game itself, and Electron is the one desktop app. The last game commit it works with is `a2be4df`.
+
+## Getting around
+
+**Ride the current** (fast travel): once Navigation is back (build a research station), the Map app lists places you know (Echo, your rafts, and the outpost once you've found it) with how far away they are. Pick one and you ride the reef's currents there in a fade, for 6% visor power (you need at least 10%). Places closer than 60 m aren't offered. The Guide tab has a page on it.
+
+The controls hint at the start of a dive shows your own key bindings as keys, for 14 seconds; the tutorial and the phone's Guide cover the rest. Apps the flood took show as *Lost* in the phone's tab bar. *Into the deep* only counts depth you reach yourself (you start the game 19 m down), so it no longer pays out the moment you arrive.

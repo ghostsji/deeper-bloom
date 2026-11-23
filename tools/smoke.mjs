@@ -228,6 +228,22 @@ try {
   check('the visor starts damaged (cracks, no compass, flickering vitals)', hud.cracks && hud.navOff && hud.vitalsDmg);
   check('milestones get you the parts to fix systems', hud.ready, hud.pct);
 
+  // Underwater the music warps; above the water it's clean.
+  const warp = await run(`
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const A = await import('./src/audio.js'), W = await import('./src/world.js');
+    db.camera.position.set(0, 12, 24);
+    await sleep(1500);
+    const under = A.audioState();
+    db.camera.position.set(0, W.SURFACE_Y + 1.5, 24);
+    await sleep(1500);
+    const above = A.audioState();
+    db.camera.position.set(0, 12, 24);
+    await sleep(300);
+    return { ready: A.audioReady(), under, above };`);
+  check('the music is warped underwater and clean above it', warp.ready && warp.under.musicWarp >= 0.8 && warp.under.musicWet > 0.6 && warp.above.musicWarp === 0 && warp.above.musicWet < 0.05,
+    `under ${warp.under.musicWarp} (wet ${warp.under.musicWet}), above ${warp.above.musicWarp} (wet ${warp.above.musicWet})`);
+
   // Rewiring (V): the right sockets bring a system back; a wrong one shocks you.
   const wire = await run(`
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -399,18 +415,18 @@ try {
   // Night and day, a current, the sinkhole and the giant.
   const envR = await run(`
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-    const E = await import('./src/environment.js');
+    const E = await import('./src/environment.js'), W = await import('./src/world.js');
     db.env.phase = 0.7;
     db.camera.position.set(4, 12, 30);
     await sleep(300);
     const lamp = db.headlamp.intensity;
     db.env.phase = 0.1;
     const c = E.CURRENTS[0];
-    db.camera.position.set(c.x, 12, c.z);
+    db.camera.position.set(c.x, Math.min(W.floorY(c.x, c.z) + 4, W.SURFACE_Y - 3), c.z); // the world is seeded: go by its floor
     await sleep(1000);
     const drift = (db.camera.position.x - c.x) * c.dir[0] + (db.camera.position.z - c.z) * c.dir[2]; // along the flow
     const hx = E.SINKHOLES[0].x, hz = E.SINKHOLES[0].z;
-    db.camera.position.set(hx, 10, hz);
+    db.camera.position.set(hx, W.floorY(hx, hz) + 4, hz);
     const y0 = db.camera.position.y;
     await sleep(1000);
     const sank = y0 - db.camera.position.y;
@@ -513,9 +529,13 @@ try {
     // An anglerfish's lure: it bites.
     const a = db.deep.anglers[0];
     const h0 = db.survival.stats.health;
-    a.lure.getWorldPosition(db.camera.position);
-    await sleep(150);
-    const bitten = h0 - db.survival.stats.health;
+    a.cool = 0; // not still resting from an earlier lunge
+    let bitten = 0;
+    for (let k = 0; k < 8 && bitten <= 0; k++) { // the lure bobs: stay on it for a moment
+      a.lure.getWorldPosition(db.camera.position);
+      await sleep(100);
+      bitten = h0 - db.survival.stats.health;
+    }
     db.camera.position.set(0, 12, 24);
     await sleep(300);
     // An abyssal polyp: far more Lumen.
@@ -644,6 +664,53 @@ try {
   check('Load game reloads onto the ready card', loaded.ready === 'Ready to dive', String(loaded.ready));
   check('Dive from the ready card plays the loaded game', loaded.hud && loaded.lumen >= 20, `${loaded.lumen} Lumen`);
 
+  // Polish pass: the controls hint, lost-app tabs, readable text, reduced flashing, fast travel.
+  const pol = await run(`
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const key = (c) => { dispatchEvent(new KeyboardEvent('keydown', { code: c })); dispatchEvent(new KeyboardEvent('keyup', { code: c })); };
+    const W = await import('./src/world.js');
+    const chips = document.querySelectorAll('#hint kbd').length;
+    // Readable text: a scrambled subtitle comes through clean.
+    const sub = document.getElementById('subtitle');
+    db.hudFx.setReadable(true);
+    db.hudFx.text(sub, 'Swim to the light in the middle of the reef.', 'comms');
+    const readable = sub.textContent === 'Swim to the light in the middle of the reef.';
+    db.hudFx.setReadable(false);
+    // Reduce flashing, from Options.
+    db.settings.show();
+    document.querySelector('#settings [data-tab="display"]').click();
+    const box = document.querySelector('#settings [data-help="reduceFlashing"]');
+    const was = document.documentElement.classList.contains('calm');
+    box.checked = !was; box.dispatchEvent(new Event('change', { bubbles: true }));
+    const toggled = document.documentElement.classList.contains('calm') !== was;
+    box.checked = was; box.dispatchEvent(new Event('change', { bubbles: true }));
+    db.settings.hide();
+    // Fast travel: blocked while Navigation is offline, then a ride back to Echo.
+    const sys0 = db.systems.serialize();
+    db.suit.load({ power: 90 });
+    db.camera.position.set(300, W.floorY(300, 0) + 4, 0);
+    await sleep(200);
+    key('Tab'); await sleep(500);
+    document.querySelector('#phone [data-tab="map"]').click(); await sleep(200);
+    const lost = [...document.querySelectorAll('#phone .phone-tabs span')].filter((e) => e.textContent === 'Lost').length;
+    const blocked = !document.querySelector('#phone [data-travel]') && /Navigation is offline/.test(document.querySelector('#phone .travel')?.textContent || '');
+    db.systems.load({ restored: [...sys0.restored, 'nav'], ready: sys0.ready });
+    document.querySelector('#phone [data-tab="build"]').click(); await sleep(100);
+    document.querySelector('#phone [data-tab="map"]').click(); await sleep(200);
+    const btn = document.querySelector('#phone [data-travel="echo"]');
+    const p0 = db.suit.power;
+    btn?.click();
+    await sleep(1300);
+    const nearEcho = Math.hypot(db.camera.position.x, db.camera.position.z) < 12, spent = p0 - db.suit.power;
+    db.systems.load(sys0);
+    db.camera.position.set(0, 12, 24);
+    await sleep(200);
+    return { chips, readable, toggled, lost, blocked, offered: !!btn, nearEcho, spent };`);
+  check('the controls hint shows your own keys', pol.chips >= 6, `${pol.chips} keys`);
+  check('lost apps are labelled Lost on the phone', pol.lost >= 1, `${pol.lost} lost`);
+  check('Readable text keeps subtitles clean', pol.readable);
+  check('Reduce flashing switches the calm mode', pol.toggled);
+  check('riding the current needs Navigation, then takes you to Echo', pol.blocked && pol.offered && pol.nearEcho && pol.spent >= 5, `spent ${pol.spent.toFixed(1)}% power`);
   check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } catch (e) {
   check('smoke test ran', false, e.message);

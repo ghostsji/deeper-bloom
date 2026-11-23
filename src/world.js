@@ -171,7 +171,7 @@ export function buildWorld(scene) {
   let silt = 0;
   // Night (0 day .. 1 night): the light drops and the water goes near black.
   let night = 0, sonar = 0; // a sonar ping thins the fog for a moment
-  let storm = 0, flash = 0;  // storm strength, and a lightning flash fading out
+  let storm = 0, flash = 0, calm = false;  // storm strength, and a lightning flash fading out
   const rain = addRain(scene), bolts = [];
   const nightWater = new THREE.Color(0x02090d), nightAir = new THREE.Color(0x04060f);
   const siltFog = new THREE.Color(0x3b3a2a);
@@ -202,6 +202,7 @@ export function buildWorld(scene) {
     setNight(v) { night = v; },
     setSonar(v) { sonar = v; },
     setStorm(v) { storm = v; },
+    setCalm(v) { calm = !!v; },
     /** A lightning strike down to the water at (x, z): a bolt and a flash. */
     strike(x, z) {
       const pts = [];
@@ -214,7 +215,7 @@ export function buildWorld(scene) {
       const bolt = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xf2fbff, fog: false }));
       scene.add(bolt);
       bolts.push({ bolt, life: 0.25 });
-      flash = 1;
+      flash = calm ? 0.2 : 1; // Reduce flashing (Options): a soft glow, not a white-out
     },
     update(dt, t, camera, playerSpeed = 0) {
       time.value = t;

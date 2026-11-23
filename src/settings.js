@@ -11,7 +11,9 @@ const KEY = 'deeperbloom-settings';
 const SAMPLE = "This is how I'll sound down here. Take your time. The reef isn't going anywhere.";
 const TABS = [['sound', 'Sound'], ['voice', "Echo's voice"], ['controls', 'Controls'], ['display', 'Display & help']];
 const CONTROL_DEFAULTS = { lookSens: 1, invertY: false, bindings: {} };
-const HELP_DEFAULTS = { showTutorial: true, showTips: true };
+// reduceFlashing: null follows the system's reduced-motion setting until you choose.
+const HELP_DEFAULTS = { showTutorial: true, showTips: true, readableText: false, reduceFlashing: null };
+export const systemCalm = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 // Performance: how far the camera draws, how far out scenery (coral, rocks, polyps, fish) is
 // kept in the scene, and how big the scenery chunks are.
 export const PERF_DEFAULTS = { viewDist: 150, sceneryDist: 150, chunkSize: 120, showFps: false };
@@ -129,6 +131,9 @@ export function createSettings(el, { onBack, onControls = () => {}, sound = () =
       <p class="sgroup">Help</p>
       <label class="scheck" data-tip="The task card in the top right, one step at a time. The phone's Guide tab has the full list."><input type="checkbox" data-help="showTutorial" ${s.showTutorial ? 'checked' : ''}> Show the tutorial</label>
       <label class="scheck" data-tip="Like this one."><input type="checkbox" data-help="showTips" ${s.showTips ? 'checked' : ''}> Show tooltips when hovering</label>
+      <p class="sgroup">Accessibility</p>
+      <label class="scheck" data-tip="Echo's lines and the visor readouts are never scrambled. Cracks, static and hum stay."><input type="checkbox" data-help="readableText" ${s.readableText ? 'checked' : ''}> Readable text</label>
+      <label class="scheck" data-tip="Lightning, shocks, reboots and glitches fade softly instead of flashing, and the screen doesn't shake. Follows your system's reduced-motion setting until you change it."><input type="checkbox" data-help="reduceFlashing" ${(s.reduceFlashing ?? systemCalm()) ? 'checked' : ''}> Reduce flashing and shaking</label>
       <p class="sgroup">Performance</p>
       ${rows('perf')}
       <label class="scheck" data-tip="A small counter in the corner, to see what the settings above do."><input type="checkbox" data-help="showFps" ${s.showFps ? 'checked' : ''}> Show frame rate</label>
