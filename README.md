@@ -139,3 +139,7 @@ Play adds more than the title screen can show (creatures, combat, the visor's gl
 Options → Display shows what the benchmark picked (and whether play confirmed it), has **Run the benchmark again**, and **Reset performance** goes back to the benchmark's choice. New settings there: **Resolution** (50-100%: the 3D world's pixel count; the HUD stays sharp) and **Glow (bloom)**. The logic is in `src/benchmark.js` (pure, unit-tested); debug runs skip the automatic benchmark unless the URL has `&bench`.
 
 Performance notes from building it: the visor overlay was the biggest per-frame cost in play. The crack glints now animate as tiny composited elements instead of inside the full-screen crack SVG (which repainted the whole screen of cracks, with its shadow, every frame), the HUD only writes CSS variables when they change, and the fog blur and blight blobs only exist while you have them.
+
+## License
+
+Deeper Bloom is free to play, study, mod and share for noncommercial purposes under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). Selling it needs the author's permission. Echo's bundled voice clips (`assets/voice/`) were made with Microsoft neural voices and aren't covered by this license.

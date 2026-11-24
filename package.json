@@ -1,6 +1,7 @@
 {
   "name": "deeper-bloom",
   "version": "0.0.1",
+  "license": "SEE LICENSE IN LICENSE.md",
   "private": true,
   "description": "Deeper Bloom: a first-person dive through a glowing reef. Sequel to Deep Bloom. Desktop only.",
   "scripts": {
