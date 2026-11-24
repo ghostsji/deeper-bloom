@@ -3,7 +3,7 @@
 //   npm run package
 import { packager } from '@electron/packager';
 import { execFileSync } from 'node:child_process';
-import { rmSync } from 'node:fs';
+import { copyFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27,6 +27,9 @@ const [dir] = await packager({
   appCopyright: 'Deeper Bloom',
   win32metadata: { ProductName: 'Deeper Bloom', FileDescription: 'Deeper Bloom' },
 });
+
+// The game's own license goes next to the exe. (The LICENSE already there is Electron's.)
+copyFileSync(path.join(root, 'LICENSE.md'), path.join(dir, 'LICENSE.md'));
 
 const zip = `${dir}.zip`;
 rmSync(zip, { force: true });
