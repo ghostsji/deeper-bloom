@@ -40,7 +40,9 @@ function createWindow(saves) {
     webPreferences: { contextIsolation: true, nodeIntegration: false, backgroundThrottling: !headless, preload: path.join(__dirname, 'preload.cjs') },
   });
   // DEEPER_BLOOM_DEBUG=1 exposes the game's internals in devtools (same as ?debug in a browser).
-  win.loadURL(`app://game/index.html${process.env.DEEPER_BLOOM_DEBUG ? '?debug' : ''}`);
+  // DEEPER_BLOOM_SEED (debug only) fixes the world seed for new games, so tests are repeatable.
+  const seed = process.env.DEEPER_BLOOM_DEBUG && process.env.DEEPER_BLOOM_SEED ? `&seed=${encodeURIComponent(process.env.DEEPER_BLOOM_SEED)}` : '';
+  win.loadURL(`app://game/index.html${process.env.DEEPER_BLOOM_DEBUG ? `?debug${seed}` : ''}`);
   // F12 opens devtools while developing; F11 toggles fullscreen like a browser.
   win.webContents.on('before-input-event', (e, input) => {
     if (input.type !== 'keyDown') return;

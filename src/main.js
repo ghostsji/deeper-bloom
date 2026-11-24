@@ -3,6 +3,8 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { createLookPass } from './looks.js';
+import { PRESETS, BENCH, PLAYCHECK, summarize, pickPreset, smooth, judgeWindow } from './benchmark.js';
 import { buildWorld, SURFACE_Y, floorY, setWorldSeed, setWaterLevel } from './world.js';
 import { createWeather, tideAt, tideRising } from './weather.js';
 import { createReef, REEF, cellOf as reefCell } from './reef.js';
@@ -34,7 +36,7 @@ import { LOGS, FULL_MEMORY } from './logs.js';
 import { UPGRADES } from './suit.js';
 import { setTooltips } from './tooltips.js';
 import { keyName } from './controls.js';
-import { initAudio, updateAudio, setMusic, uiSound, pop, chime, thunk, salvagePing, rebootSound, glitchSound, staticSound, creakSound, glassCrackSound, bubbleSound, lowPowerSound, chargeSound, sparkSound, setEars, earPop, giantDrone, sonarSound, giantCall, thunder, setPaused, gasp, heartbeat, warn, munch, sizzle, grab, harpoonFire, thud, hiss, bite, release, click } from './audio.js';
+import { initAudio, updateAudio, setMusic, setAmbient, uiSound, pop, chime, thunk, salvagePing, rebootSound, glitchSound, staticSound, creakSound, glassCrackSound, bubbleSound, lowPowerSound, chargeSound, sparkSound, setEars, earPop, giantDrone, sonarSound, giantCall, thunder, setPaused, gasp, heartbeat, warn, munch, sizzle, grab, harpoonFire, thud, hiss, bite, release, click } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 const BLOOM_FULL = 60;   // Lumen gathered for the reef to glow at full strength
@@ -63,7 +65,9 @@ camera.position.set(0, 7, 24);
 // 7); with no save, a new world is rolled.
 let savedGame = null;
 try { savedGame = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch { /* none */ }
-const worldSeed = savedGame ? savedGame.seed ?? 7 : 1 + Math.floor(Math.random() * 2147483000);
+// A debug run can fix the seed for new games (?debug&seed=N), so tests see the same world.
+const debugSeed = new URLSearchParams(location.search).has('debug') ? Number(new URLSearchParams(location.search).get('seed')) || 0 : 0;
+const worldSeed = savedGame ? savedGame.seed ?? 7 : debugSeed || 1 + Math.floor(Math.random() * 2147483000);
 setWorldSeed(worldSeed);
 const world = buildWorld(scene);
 applyLayout(worldSeed, world.kelpPatches); // the outpost, wrecks, cables, vents... from the seed
@@ -172,6 +176,8 @@ const combat = createCombat(scene, camera, world, {
 });
 
 // Options opens from the main menu or the pause menu, and Back returns there.
+let renderReady = false, benchRunning = false;
+let lookPass = null; // the picture's look (Options → Display), made with the composer below
 let settingsNow = {}; // the latest settings (for re-applying the visor theme once it unlocks)
 const applyTheme = () => { document.body.dataset.theme = systems.integrity >= 1 ? settingsNow.theme || '' : ''; };
 const settings = createSettings($('settings'), {
@@ -190,21 +196,40 @@ const settings = createSettings($('settings'), {
     const calm = s.reduceFlashing ?? systemCalm();
     document.documentElement.classList.toggle('calm', calm);
     world.setCalm(calm);
+    setAmbient(s.ambient || 'reef');
+    lookPass?.set(s.look);
+    lookPass?.setStill(calm);
+    applyRender(s);
     settingsNow = s;
     applyTheme();
   },
   sound: (kind) => uiSound(kind),
+  onBenchmark: () => { settings.hide(); if (state === 'paused') $('pause').hidden = false; runBenchmark(); },
 });
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.85, 0.55, 0.6);
 composer.addPass(bloomPass);
 composer.addPass(new OutputPass());
+lookPass = createLookPass();
+composer.addPass(lookPass.pass);
+lookPass.set(settingsNow.look);
+lookPass.setStill(document.documentElement.classList.contains('calm'));
+renderReady = true;
+applyRender(settingsNow);
 
+// Resolution scale and bloom (Options → Display, or the benchmark).
+function applyRender(s) {
+  if (!renderReady) return;
+  const pr = Math.min(devicePixelRatio, 2) * (s.renderScale ?? 1);
+  if (Math.abs(renderer.getPixelRatio() - pr) > 0.001) { renderer.setPixelRatio(pr); composer.setPixelRatio(pr); resize(); }
+  bloomPass.enabled = s.bloom !== false;
+}
 function resize() {
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h, false);
   composer.setSize(w, h);
+  lookPass.setSize(w * renderer.getPixelRatio(), h * renderer.getPixelRatio());
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
@@ -928,6 +953,100 @@ function mapView() {
   };
 }
 
+// ---- The first-run benchmark --------------------------------------------------------
+// Once per account (the result is saved with the settings), behind the title screen: each preset,
+// best first, renders a few demanding views; the first that runs smoothly is kept. See benchmark.js.
+const nextFrame = () => new Promise((r) => requestAnimationFrame(r));
+async function sampleFrames(ms) {
+  const out = [];
+  let last = await nextFrame();
+  const end = last + ms;
+  while (last < end) { const now = await nextFrame(); out.push(now - last); last = now; }
+  return out;
+}
+let benchSkip = false;
+$('benchrun').querySelector('[data-benchskip]').addEventListener('click', () => { benchSkip = true; uiSound('click'); });
+async function runBenchmark({ quick = false } = {}) {
+  if (benchRunning) return null;
+  benchRunning = true; benchSkip = false;
+  const box = $('benchrun'), bar = box.querySelector('i'), note = box.querySelector('[data-note]');
+  box.hidden = false;
+  const was = { pos: camera.position.clone(), rot: camera.quaternion.clone(), state, hud: $('hud').hidden };
+  $('hud').hidden = false; // the visor costs frames too: measure with it
+  $('title').classList.add('benching');
+  const before = { ...settingsNow };
+  const warm = quick ? 150 : BENCH.warm, sample = quick ? 300 : BENCH.sample;
+  const results = [];
+  // First, the screen's refresh rate: the cheapest preset, looking at open water.
+  note.textContent = 'Measuring your screen…';
+  applyRender({ ...settingsNow, ...PRESETS[PRESETS.length - 1].values });
+  camera.position.set(-180, 8, 140); camera.lookAt(-60, 0, 40);
+  await sampleFrames(warm);
+  const cap = await sampleFrames(quick ? 300 : 700);
+  const hz = Math.round(1000 / [...cap].sort((a, b) => a - b)[Math.floor(cap.length / 2)]);
+  let step = 0;
+  const steps = PRESETS.length * BENCH.spots.length;
+  for (const p of PRESETS) {
+    if (benchSkip) break;
+    note.textContent = `Trying ${p.name}…`;
+    applyRender({ ...settingsNow, ...p.values });
+    world.setView({ view: p.values.viewDist, scenery: p.values.sceneryDist, chunk: p.values.chunkSize });
+    const frames = [];
+    for (const spot of BENCH.spots) {
+      if (benchSkip) break;
+      const y = (v, x, z) => (v === 'surface+2' ? SURFACE_Y + 2 : v === 'surface' ? SURFACE_Y : v === 'floor+4' ? Math.min(floorY(x, z) + 4, SURFACE_Y - 2) : v === 'floor' ? floorY(x, z) : v);
+      camera.position.set(spot.at[0], y(spot.at[1], spot.at[0], spot.at[2]), spot.at[2]);
+      camera.lookAt(spot.look[0], y(spot.look[1], spot.look[0], spot.look[2]), spot.look[2]);
+      await sampleFrames(warm);
+      frames.push(...await sampleFrames(sample));
+      bar.style.width = `${Math.round((++step / steps) * 100)}%`;
+    }
+    if (benchSkip) break;
+    const r = { id: p.id, ...summarize(frames) };
+    results.push(r);
+    if (smooth(r, hz)) break; // smooth: no need to go lower
+  }
+  camera.position.copy(was.pos); camera.quaternion.copy(was.rot);
+  $('hud').hidden = was.hud; $('title').classList.remove('benching');
+  box.hidden = true;
+  benchRunning = false;
+  if (benchSkip) {
+    settings.applyBenchmark(settings.benchmark ? null : {}, settings.benchmark || { skipped: true, at: Date.now() });
+    applyRender(before);
+    world.setView({ view: before.viewDist ?? 150, scenery: before.sceneryDist ?? 150, chunk: before.chunkSize ?? 120 });
+    return null;
+  }
+  const chosen = pickPreset(results, hz);
+  settings.applyBenchmark(chosen.values, { preset: chosen.id, results, hz, at: Date.now(), screen: [innerWidth, innerHeight, devicePixelRatio] });
+  const best = results.find((r) => r.id === chosen.id);
+  toast(`Graphics set to ${chosen.name}${best ? ` (${best.fps} fps)` : ''} for this PC. Change it any time in Options → Display.`, { color: '#9ff6e6' });
+  return { chosen: chosen.id, results };
+}
+
+// The check in play (see PLAYCHECK): steps the benchmark's choice down if play isn't smooth.
+const playCheck = { start: 0, frames: 0, streak: 0, settled: false };
+function updatePlayCheck() {
+  const b = settings.benchmark, now = performance.now();
+  if (!b?.preset || b.confirmed || benchRunning || state !== 'playing') { playCheck.start = 0; playCheck.settled = false; return; }
+  if (!playCheck.start) { playCheck.start = now; playCheck.frames = 0; return; }
+  playCheck.frames++;
+  const secs = (now - playCheck.start) / 1000;
+  if (!playCheck.settled) { if (secs >= PLAYCHECK.settle) { playCheck.settled = true; playCheck.start = now; playCheck.frames = 0; } return; }
+  if (secs < PLAYCHECK.window) return;
+  const fps = playCheck.frames / secs;
+  playCheck.start = now; playCheck.frames = 0;
+  const verdict = judgeWindow(fps, b.hz || 60, playCheck.streak);
+  const i = PRESETS.findIndex((p) => p.id === b.preset);
+  if (verdict === 'down' && i < PRESETS.length - 1) {
+    const next = PRESETS[i + 1];
+    playCheck.streak = 0; playCheck.settled = false; // let the new settings settle first
+    settings.applyBenchmark(next.values, { ...b, preset: next.id, stepped: (b.stepped || 0) + 1, playFps: Math.round(fps) });
+    toast(`Graphics lowered to ${next.name} to keep the game smooth (${Math.round(fps)} fps). Change it any time in Options → Display.`, { color: '#9ff6e6' });
+  } else if (verdict === 'confirmed' || (verdict === 'down' && i === PRESETS.length - 1)) {
+    settings.applyBenchmark(null, { ...b, confirmed: true, playFps: Math.round(fps) });
+  } else playCheck.streak++;
+}
+
 // ---- Riding the current (fast travel) ---------------------------------------------
 // The atoll is 2.4 km across. Once Navigation is back, the Map app can plot the reef's currents
 // to somewhere you know (Echo, your rafts, the outpost) and you ride them there, for a bite of
@@ -1444,7 +1563,7 @@ function frame() {
       const n = builder.count('garden');
       if (n) { setLumen(lumen + n); save(); }
     }
-  } else if (state === 'title') {
+  } else if (state === 'title' && !benchRunning) {
     // Slow drift over the reef behind the title card.
     // Slow drift over the reef, above the kelp tops.
     camera.position.set(Math.sin(t * 0.05) * 34, 19, Math.cos(t * 0.05) * 34);
@@ -1493,13 +1612,15 @@ function frame() {
     glitchSound(1);
     toast('App crashed: there\'s water in your phone. Dry it at a cook fire.', { color: '#9fe8ff' });
   }
+  updatePlayCheck();
+  lookPass.tick(t);
   composer.render();
   requestAnimationFrame(frame);
 }
 
 
 // ?debug exposes the internals in the console.
-if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { worldSeed, reveal, deep, weather, reef, lightning, plantSeedling, sonarPing, getSonar: () => sonarTargets, getFixedMap: () => fixedCorrupt, getWaypoint: () => waypoint, renderer, composer, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, systems, hudFx, salvage, suit, hazards, outpost, rewire, env, headlamp, phone, feedPearl, setScreen: () => { hasScreen = true; }, getPearl: () => pearlLevel, getSignal: () => signal, isFixed: () => phoneFixed, giveFuses: (n) => { fusesHeld += n; }, setSilt: (v) => { silt = v; }, getSilt: () => silt, addLumen: (n) => setLumen(lumen + n) } });
+if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { db: { worldSeed, reveal, deep, weather, reef, lightning, plantSeedling, sonarPing, getSonar: () => sonarTargets, getFixedMap: () => fixedCorrupt, getWaypoint: () => waypoint, renderer, composer, lookPass, runBenchmark, playCheck, scene, camera, world, player, builder, research, survival, combat, settings, menus, tutorial, systems, hudFx, salvage, suit, hazards, outpost, rewire, env, headlamp, phone, feedPearl, setScreen: () => { hasScreen = true; }, getPearl: () => pearlLevel, getSignal: () => signal, isFixed: () => phoneFixed, giveFuses: (n) => { fusesHeld += n; }, setSilt: (v) => { silt = v; }, getSilt: () => silt, addLumen: (n) => setLumen(lumen + n) } });
 
 renderBuildBar();
 load();
@@ -1519,6 +1640,10 @@ if (wasReady) {
   camera.position.set(0, 7, 24);
   setState('paused');
 } else setState('title');
+{
+  const q = new URLSearchParams(location.search);
+  if (!settings.benchmark && (!q.has('debug') || q.has('bench'))) setTimeout(() => { if (state === 'title') runBenchmark(); }, 1200);
+}
 // Menu music. The desktop app allows sound straight away; a browser waits for a first click or key.
 if (ELECTRON) initAudio();
 else for (const type of ['pointerdown', 'keydown']) addEventListener(type, () => initAudio(), { once: true });

@@ -55,15 +55,28 @@ function cracks(w, h, seed, impacts = [[0.86, 0.16, 7], [0.1, 0.78, 5], [0.62, 0
   }
   const all = [...lines, ...rings];
   const draw = (stroke, dx, extra = 0) => all.map(([d, sw]) => `<path d="${d}" stroke="${stroke}" stroke-width="${f(sw + extra)}"${grow ? ' pathLength="1"' : ''}${dx ? ` transform="translate(${dx} ${dx})"` : ''}/>`).join('');
-  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  // The glints twinkle, so they're tiny separate elements that only fade (the GPU does that without
+  // repainting). Animating them inside the big crack drawing repainted the whole screen of cracks,
+  // with its shadow, every frame: it halved the frame rate.
+  return `<svg class="crk" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" fill="none" stroke-linecap="round" stroke-linejoin="round">
     <g class="crack-shadow">${draw('rgba(0,10,14,.45)', 1.2, 0.8)}</g>
     <g class="crack-edge">${draw('rgba(214,246,244,.6)', 0)}</g>
     <g class="crack-shards">${shards.join('')}</g>
-    <g class="crack-glints">${glints.map(([x, y, s2]) => `<path d="M${f(x - s2 * 2)} ${f(y)}H${f(x + s2 * 2)}M${f(x)} ${f(y - s2 * 2)}V${f(y + s2 * 2)}" stroke="#fff" stroke-width=".8" style="--d:${(rnd() * 4).toFixed(2)}s"/>`).join('')}</g>
     <g class="crack-hit">${lines.map(([d]) => `<path d="${d}"/>`).join('')}${impacts.map(([fx, fy, n]) => `<circle cx="${f(w * fx)}" cy="${f(h * fy)}" r="${f(Math.min(w, h) * (0.015 + n * 0.004) * 2)}"/>`).join('')}</g>
-  </svg>`;
+  </svg><div class="glints" aria-hidden="true">${glints.map(([x, y, s2]) => `<i style="left:${f(x / w * 100)}%;top:${f(y / h * 100)}%;--s:${f(s2)};--d:${(rnd() * 4).toFixed(2)}s"></i>`).join('')}</div>`;
 }
 export const crackSvg = cracks;
+
+// Writes a CSS variable only when its value really changes. The HUD updates every frame, and
+// rewriting the same values made the browser restyle and repaint the whole visor each time.
+const varCache = new WeakMap();
+function setVar(el, k, v) {
+  let m = varCache.get(el);
+  if (!m) varCache.set(el, (m = new Map()));
+  if (m.get(k) === v) return;
+  m.set(k, v);
+  el.style.setProperty(k, v);
+}
 
 // Which HUD elements each system drives.
 const PARTS = { vitals: ['.stats'], comms: ['#subtitle'], ledger: ['.lumen', '.datacount'], depth: ['.depthbox'], lens: ['#lens'], nav: ['#compass'], sensor: [], visor: [] };
@@ -173,7 +186,7 @@ export function createHudFx(root, systems) {
     compass.classList.toggle('offline', !systems.online('nav') || !powered('nav'));
     if (cmpOff()) cmpOff().textContent = !systems.online('nav') ? 'NAV OFFLINE · build a research station to restore' : 'NAV · NO POWER · recharge your visor';
     visor.classList.toggle('sealed', systems.online('visor')); // fixed glass can't shock you
-    visor.style.setProperty('--crack', systems.online('visor') ? 0 : Math.max(0.25, 0.75 - systems.integrity * 0.5));
+    setVar(visor, '--crack', systems.online('visor') ? 0 : Math.max(0.25, 0.75 - systems.integrity * 0.5));
     const pct = Math.round(systems.integrity * 100);
     const nReady = systems.ready.length;
     integrityEl.innerHTML = `<span>SYS</span><i style="--v:${systems.integrity}"></i><b>${pct}%${nReady ? ` <em>+${nReady} V</em>` : ''}</b>`;
@@ -211,7 +224,7 @@ export function createHudFx(root, systems) {
     setAir(a, playing) {
       const was = air;
       air = playing ? a : 0;
-      visor.style.setProperty('--air', air.toFixed(3));
+      setVar(visor, '--air', air.toFixed(3));
       visor.classList.toggle('airfail', air > 0.05);
       // Readouts drop out at random, more often the worse it gets.
       for (const q of ['.lumen', '.datacount', '.depthbox', '.stats', '#compass', '#tutorial']) {
@@ -245,18 +258,20 @@ export function createHudFx(root, systems) {
       for (const s2 of SYSTEMS) for (const q of PARTS[s2.id]) root.querySelectorAll(q).forEach((el) => el.classList.toggle('nopower', !powered(s2.id)));
       if (!was || was.unpowered('nav') !== st.unpowered('nav')) setParts();
       root.querySelectorAll('.v-stress-layer').forEach((el) => el.classList.toggle('on', st.crackLayers >= Number(el.dataset.l)));
-      visor.style.setProperty('--leak', st.leak.toFixed(3));
+      setVar(visor, '--leak', st.leak.toFixed(3));
       visor.classList.toggle('leaking', st.leak > 0.01);
       strainEl.hidden = st.sealed || st.stress <= 0.01;
-      strainEl.style.setProperty('--s', st.stress.toFixed(3));
+      setVar(strainEl, '--s', st.stress.toFixed(3));
       strainEl.classList.toggle('max', st.stress >= 1);
-      visor.style.setProperty('--fog', (st.fog ?? 0).toFixed(3));
+      setVar(visor, '--fog', (st.fog ?? 0).toFixed(3));
+      visor.classList.toggle('fogged', (st.fog ?? 0) > 0.02); // the fog's blur is only switched on while there is fog
       // Blight creeps in from the edges; readouts under it go dark as it spreads.
       const bl = st.blight ?? 0;
-      visor.style.setProperty('--blight', bl.toFixed(3));
+      setVar(visor, '--blight', bl.toFixed(3));
+      visor.classList.toggle('has-blight', bl > 0.005); // no blight: its crawling blobs aren't drawn at all
       const BLIGHTED = [['.lumen', 0.3], ['.datacount', 0.3], ['.depthbox', 0.55], ['#compass', 0.7], ['.stats', 0.85]];
       for (const [q, at] of BLIGHTED) root.querySelector(q)?.classList.toggle('blighted', bl >= at);
-      visor.style.setProperty('--ears', (st.ears ?? 0).toFixed(3));
+      setVar(visor, '--ears', (st.ears ?? 0).toFixed(3));
       const tw = root.querySelector('#suitwarn');
       const clk = root.querySelector('#clock');
       if (st.clock && clk.textContent !== st.clock) clk.textContent = st.clock;

@@ -1,6 +1,8 @@
 import { VOICE_DEFAULTS, VOICE_PACKS } from './voice-settings.js';
 import { ECHO_LINES } from './echo-lines.js';
-import { setVolumes } from './audio.js';
+import { setVolumes, AMBIENTS } from './audio.js';
+import { LOOKS } from './looks.js';
+import { PRESETS } from './benchmark.js';
 import { configure, voiceList, preview, liveAvailable, systemAvailable, stop, systemVoices, onSystemVoicesChanged } from './voice.js';
 import { ACTIONS, keyLabel, keyFor, bind, setBindings, suspendBindings } from './controls.js';
 
@@ -16,7 +18,9 @@ const HELP_DEFAULTS = { showTutorial: true, showTips: true, readableText: false,
 export const systemCalm = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 // Performance: how far the camera draws, how far out scenery (coral, rocks, polyps, fish) is
 // kept in the scene, and how big the scenery chunks are.
-export const PERF_DEFAULTS = { viewDist: 150, sceneryDist: 150, chunkSize: 120, showFps: false };
+export const PERF_DEFAULTS = { viewDist: 150, sceneryDist: 150, chunkSize: 120, renderScale: 1, bloom: true, showFps: false };
+// The picture's look (a colour-grading shader) and the underwater music.
+const STYLE_DEFAULTS = { look: 'clean', ambient: 'reef' };
 // Hover help for the settings that aren't self-explanatory.
 const TIPS = {
   masterVol: 'Everything at once.', musicVol: 'The main menu theme and the reef pad.', sfxVol: 'Bubbles, creatures, the harpoon, the sea.', uiVol: 'Menu hover and click sounds.',
@@ -25,6 +29,7 @@ const TIPS = {
   roomSize: 'How big the space her voice echoes in sounds.', wet: 'How much of the echo you hear.', damping: 'How quickly the echo softens.',
   dry: 'How much of her plain voice you hear.', cutoff: 'Lower sounds more muffled and underwater.',
   lookSens: "How far the view turns when you move the mouse. Doesn't change the turn keys.",
+  renderScale: 'How many pixels the 3D world is drawn at, before it is scaled to your screen. Lower is much faster but softer. The HUD stays sharp.',
   viewDist: 'How far you can see underwater (three times this in the open air). Lower is faster; the fog closes in to match.',
   sceneryDist: 'How far out coral, rocks, polyps, jellies and fish are kept. Lower is faster; things fade in closer.',
   chunkSize: 'Scenery loads in square chunks this wide. Smaller chunks load tighter round you (less drawn); bigger ones swap less often.',
@@ -49,6 +54,7 @@ const SLIDERS = [
   ['dry', 'Dry level', 0, 1, 0.01, (v) => v.toFixed(2), 'fx'],
   ['cutoff', 'Lowpass cutoff', 500, 10000, 100, (v) => `${v} Hz`, 'fx'],
   ['lookSens', 'Look sensitivity', 0.2, 3, 0.05, (v) => `${v.toFixed(2)}×`, 'controls'],
+  ['renderScale', 'Resolution', 0.5, 1, 0.05, pct, 'perf'],
   ['viewDist', 'Render distance', 60, 250, 10, (v) => `${v} m`, 'perf'],
   ['sceneryDist', 'Scenery distance', 40, 300, 10, (v) => `${v} m`, 'perf'],
   ['chunkSize', 'Chunk size', 40, 240, 20, (v) => `${v} m`, 'perf'],
@@ -62,7 +68,7 @@ const applySound = (s) => setVolumes({ master: s.masterVol, music: s.musicVol, s
 export function loadSettings(onControls = () => {}) {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(KEY)) || {}; } catch { /* defaults */ }
-  const s = { ...VOICE_DEFAULTS, ...CONTROL_DEFAULTS, ...HELP_DEFAULTS, ...PERF_DEFAULTS, ...saved };
+  const s = { ...VOICE_DEFAULTS, ...CONTROL_DEFAULTS, ...HELP_DEFAULTS, ...PERF_DEFAULTS, ...STYLE_DEFAULTS, ...saved };
   if (s.source === 'live' && !liveAvailable()) s.source = 'bundled';
   configure(s);
   applySound(s);
@@ -72,7 +78,7 @@ export function loadSettings(onControls = () => {}) {
 }
 
 export const THEMES = [['', 'Echo cyan (default)'], ['amber', 'Salvage amber'], ['white', 'Clean white'], ['bloom', 'Deep Bloom pink'], ['green', 'Old sonar green']];
-export function createSettings(el, { onBack, onControls = () => {}, sound = () => {}, themesUnlocked = () => false }) {
+export function createSettings(el, { onBack, onControls = () => {}, sound = () => {}, themesUnlocked = () => false, onBenchmark = () => {} }) {
   let s = loadSettings(onControls);
   let voices = null, tab = 'sound', waiting = null, startFs = null;
   const save = () => {
@@ -83,6 +89,19 @@ export function createSettings(el, { onBack, onControls = () => {}, sound = () =
     try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* not remembered */ }
   };
   const fmtOf = (k) => SLIDERS.find(([key]) => key === k)[5];
+  // You changed a performance setting yourself: the check in play leaves your choice alone.
+  const yourChoice = () => { if (s.benchmark?.preset && !s.benchmark.confirmed) s.benchmark = { ...s.benchmark, confirmed: true, manual: true }; };
+  // What the benchmark found on this PC (it runs once per account; see benchmark.js).
+  function benchLine() {
+    const b = s.benchmark;
+    if (!b) return '<p class="sub">The benchmark hasn\'t run on this PC yet.</p>';
+    if (b.skipped) return '<p class="sub">You skipped the benchmark, so these are the defaults.</p>';
+    const p = PRESETS.find((x) => x.id === b.preset);
+    const best = (b.results || []).find((r) => r.id === b.preset);
+    const how = b.stepped ? `, lowered ${b.stepped === 1 ? 'once' : `${b.stepped} times`} in play` : '';
+    const done = b.confirmed ? ` Confirmed smooth in play${b.playFps ? ` (${b.playFps} fps)` : ''}.` : ' It\'s still checking during your first minutes of play.';
+    return `<p class="sub bench-result">Benchmark picked <b>${p ? p.name : b.preset}</b>${best ? ` (${best.fps} fps)` : ''}${how} for this PC on ${new Date(b.at).toLocaleDateString()}.${done}</p>`;
+  }
   const row = ([k, label, min, max, step, fmt]) => `
     <label class="srow"${TIPS[k] ? ` data-tip="${TIPS[k]}"` : ''}><span>${label}<b data-val="${k}">${fmt(s[k])}</b></span>
       <input type="range" data-k="${k}" min="${min}" max="${max}" step="${step}" value="${s[k]}"></label>`;
@@ -101,9 +120,15 @@ export function createSettings(el, { onBack, onControls = () => {}, sound = () =
   onSystemVoicesChanged(() => { if (!el.hidden && tab === 'voice') render(); });
 
   const panes = {
-    sound: () => `${rows('sound')}
+    sound: () => {
+      const amb = AMBIENTS.find(([id]) => id === s.ambient) || AMBIENTS[0];
+      return `${rows('sound')}
       <label class="scheck"><input type="checkbox" data-mute ${s.muted ? 'checked' : ''}> Mute all sound</label>
-      <div class="sbtns"><button type="button" class="secondary" data-reset="sound">Reset sound</button></div>`,
+      <p class="sgroup">Underwater music</p>
+      <label class="srow" data-tip="What plays while you're in the water. The main menu keeps its own theme."><span>Track</span><select data-ambient>${AMBIENTS.map(([id, name]) => `<option value="${id}"${id === amb[0] ? ' selected' : ''}>${name}</option>`).join('')}</select></label>
+      <p class="sub">${amb[2]}</p>
+      <div class="sbtns"><button type="button" class="secondary" data-reset="sound">Reset sound</button></div>`;
+    },
     voice: () => {
       const neural = s.source === 'live', fxOn = s.source === 'bundled' || neural;
       const voiceSel = neural ? `<label class="srow"><span>Neural voice</span>
@@ -125,6 +150,9 @@ export function createSettings(el, { onBack, onControls = () => {}, sound = () =
       <div class="sbtns"><button type="button" class="secondary" data-reset="controls">Reset controls</button></div>`,
     display: () => `<label class="scheck"><input type="checkbox" data-fs ${document.fullscreenElement || winFs ? 'checked' : ''}> Fullscreen <small>(F11)</small></label>
       ${DESKTOP ? `<label class="scheck"><input type="checkbox" data-startfs ${startFs !== false ? 'checked' : ''}> Start the game in fullscreen</label>` : ''}
+      <p class="sgroup">Look</p>
+      <label class="srow" data-tip="A colour-grading shader over the whole picture. It changes how the game looks, not how it plays."><span>Shader</span><select data-look>${LOOKS.map((l) => `<option value="${l.id}"${l.id === (s.look || 'clean') ? ' selected' : ''}>${l.name}</option>`).join('')}</select></label>
+      <p class="sub">${(LOOKS.find((l) => l.id === s.look) || LOOKS[0]).desc}</p>
       <p class="sgroup">Visor theme</p>
       ${themesUnlocked() ? `<label class="srow"><span>HUD colours</span><select data-theme>${THEMES.map(([id, name]) => `<option value="${id}"${(s.theme || '') === id ? ' selected' : ''}>${name}</option>`).join('')}</select></label>`
         : '<p class="sub" data-tip="Restore all eight visor systems (SYS 100%).">Locked: restore every visor system to unlock new HUD colours.</p>'}
@@ -135,9 +163,11 @@ export function createSettings(el, { onBack, onControls = () => {}, sound = () =
       <label class="scheck" data-tip="Echo's lines and the visor readouts are never scrambled. Cracks, static and hum stay."><input type="checkbox" data-help="readableText" ${s.readableText ? 'checked' : ''}> Readable text</label>
       <label class="scheck" data-tip="Lightning, shocks, reboots and glitches fade softly instead of flashing, and the screen doesn't shake. Follows your system's reduced-motion setting until you change it."><input type="checkbox" data-help="reduceFlashing" ${(s.reduceFlashing ?? systemCalm()) ? 'checked' : ''}> Reduce flashing and shaking</label>
       <p class="sgroup">Performance</p>
+      ${benchLine()}
       ${rows('perf')}
+      <label class="scheck" data-tip="The soft glow round everything that shines. Turning it off saves a lot on slower graphics cards."><input type="checkbox" data-help="bloom" ${s.bloom !== false ? 'checked' : ''}> Glow (bloom)</label>
       <label class="scheck" data-tip="A small counter in the corner, to see what the settings above do."><input type="checkbox" data-help="showFps" ${s.showFps ? 'checked' : ''}> Show frame rate</label>
-      <div class="sbtns"><button type="button" class="secondary" data-reset="perf">Reset performance</button></div>`,
+      <div class="sbtns"><button type="button" class="secondary" data-bench>Run the benchmark again</button><button type="button" class="secondary" data-reset="perf" data-tip="Back to what the benchmark picked for this PC (or the defaults, if it hasn't run).">Reset performance</button></div>`,
   };
   let winFs = false;
 
@@ -191,14 +221,17 @@ export function createSettings(el, { onBack, onControls = () => {}, sound = () =
     if (!k) return;
     s[k] = Number(e.target.value);
     el.querySelector(`[data-val="${k}"]`).textContent = fmtOf(k)(s[k]);
+    if (SLIDERS.find((r) => r[0] === k)?.[6] === 'perf') yourChoice();
     save();
   });
   el.addEventListener('change', async (e) => {
     const t = e.target;
     if (t.matches('[data-mute]')) { s.muted = t.checked; save(); }
     if (t.matches('[data-invert]')) { s.invertY = t.checked; save(); }
-    if (t.matches('[data-help]')) { s[t.dataset.help] = t.checked; save(); }
+    if (t.matches('[data-help]')) { s[t.dataset.help] = t.checked; if (t.dataset.help === 'bloom') yourChoice(); save(); }
     if (t.matches('[data-theme]')) { s.theme = t.value; save(); }
+    if (t.matches('[data-look]')) { s.look = t.value; save(); render(); }
+    if (t.matches('[data-ambient]')) { s.ambient = t.value; save(); render(); }
     if (t.matches('[data-source]')) {
       const [kind, ...rest] = t.value.split(':'), arg = rest.join(':');
       if (kind === 'pack') { s.source = 'bundled'; s.pack = arg; }
@@ -239,12 +272,13 @@ export function createSettings(el, { onBack, onControls = () => {}, sound = () =
     const reset = e.target.closest('[data-reset]')?.dataset.reset;
     if (reset) {
       sound('click');
-      if (reset === 'sound') for (const k of SOUND_KEYS) s[k] = VOICE_DEFAULTS[k];
-      if (reset === 'voice') s = { ...VOICE_DEFAULTS, ...Object.fromEntries(SOUND_KEYS.map((k) => [k, s[k]])), lookSens: s.lookSens, invertY: s.invertY, bindings: s.bindings, ...Object.fromEntries(Object.keys({ ...HELP_DEFAULTS, ...PERF_DEFAULTS }).map((k) => [k, s[k]])) };
+      if (reset === 'sound') { for (const k of SOUND_KEYS) s[k] = VOICE_DEFAULTS[k]; s.ambient = STYLE_DEFAULTS.ambient; }
+      if (reset === 'voice') s = { ...VOICE_DEFAULTS, ...Object.fromEntries(SOUND_KEYS.map((k) => [k, s[k]])), lookSens: s.lookSens, invertY: s.invertY, bindings: s.bindings, ...Object.fromEntries(Object.keys({ ...HELP_DEFAULTS, ...PERF_DEFAULTS, ...STYLE_DEFAULTS, theme: 0 }).map((k) => [k, s[k]])) };
       if (reset === 'controls') Object.assign(s, CONTROL_DEFAULTS, { bindings: {} });
-      if (reset === 'perf') Object.assign(s, PERF_DEFAULTS);
+      if (reset === 'perf') Object.assign(s, PERF_DEFAULTS, PRESETS.find((p) => p.id === s.benchmark?.preset)?.values || {});
       save(); render();
     }
+    if (e.target.closest('[data-bench]')) { sound('click'); onBenchmark(); return; }
     if (e.target.closest('[data-back]')) { sound('back'); cancelWait(); stop(); onBack(); }
   });
   el.addEventListener('pointerover', (e) => {
@@ -255,6 +289,14 @@ export function createSettings(el, { onBack, onControls = () => {}, sound = () =
   const previewNow = () => preview(SAMPLE, { key: 'meet', i: 1, text: ECHO_LINES.meet[1] });
   return {
     get gap() { return s.gap; },
+    get benchmark() { return s.benchmark || null; },
+    /** Saves the benchmark's result and the settings it picked (or just the record, if skipped). */
+    applyBenchmark(values, record) {
+      Object.assign(s, values || {});
+      s.benchmark = record;
+      save();
+      if (!el.hidden) render();
+    },
     show() {
       render();
       el.hidden = false;

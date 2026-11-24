@@ -20,7 +20,7 @@ const profile = mkdtempSync(path.join(tmpdir(), 'deeper-bloom-smoke-'));
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const app = spawn(electron, [...(packaged ? [] : [root]), `--remote-debugging-port=${PORT}`], {
-  env: { ...process.env, DEEPER_BLOOM_DEBUG: '1', DEEPER_BLOOM_HEADLESS: '1', DEEPER_BLOOM_USER_DATA: profile },
+  env: { ...process.env, DEEPER_BLOOM_DEBUG: '1', DEEPER_BLOOM_HEADLESS: '1', DEEPER_BLOOM_USER_DATA: profile, DEEPER_BLOOM_SEED: process.env.SMOKE_SEED || '7' }, // a fixed world, so checks are repeatable (SMOKE_SEED to try others)
   stdio: 'ignore',
 });
 
@@ -423,7 +423,7 @@ try {
     db.env.phase = 0.1;
     const c = E.CURRENTS[0];
     db.camera.position.set(c.x, Math.min(W.floorY(c.x, c.z) + 4, W.SURFACE_Y - 3), c.z); // the world is seeded: go by its floor
-    await sleep(1000);
+    await sleep(1500); // seeded currents vary in strength: give the weakest time to show
     const drift = (db.camera.position.x - c.x) * c.dir[0] + (db.camera.position.z - c.z) * c.dir[2]; // along the flow
     const hx = E.SINKHOLES[0].x, hz = E.SINKHOLES[0].z;
     db.camera.position.set(hx, W.floorY(hx, hz) + 4, hz);
@@ -711,6 +711,59 @@ try {
   check('Readable text keeps subtitles clean', pol.readable);
   check('Reduce flashing switches the calm mode', pol.toggled);
   check('riding the current needs Navigation, then takes you to Echo', pol.blocked && pol.offered && pol.nearEcho && pol.spent >= 5, `spent ${pol.spent.toFixed(1)}% power`);
+  // Looks (a colour-grading shader) and underwater music, both picked in Options.
+  const sty = await run(`
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const A = await import('./src/audio.js');
+    const pick = (sel, v) => { const e = document.querySelector('#settings ' + sel); e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); };
+    db.settings.show();
+    document.querySelector('#settings [data-tab="display"]').click();
+    const looks = document.querySelectorAll('#settings [data-look] option').length;
+    pick('[data-look]', 'camera');
+    await sleep(300);
+    const on = db.lookPass.pass.enabled && db.lookPass.current === 'camera';
+    let frames = 0; const t0 = performance.now();
+    await new Promise((r) => { const f = () => (performance.now() - t0 < 1000 ? (frames++, requestAnimationFrame(f)) : r()); requestAnimationFrame(f); });
+    document.querySelector('#settings [data-tab="display"]').click();
+    pick('[data-look]', 'clean');
+    const off = !db.lookPass.pass.enabled;
+    document.querySelector('#settings [data-tab="sound"]').click();
+    const tracks = document.querySelectorAll('#settings [data-ambient] option').length;
+    pick('[data-ambient]', 'whales');
+    await sleep(900);
+    const st = A.audioState();
+    document.querySelector('#settings [data-tab="sound"]').click();
+    pick('[data-ambient]', 'reef');
+    db.settings.hide();
+    return { looks, on, off, fps: frames, tracks, ambient: st.ambient, music: st.music };`);
+  check('a shader look can be picked and turned back off', sty.looks >= 6 && sty.on && sty.off, `${sty.looks} looks, ${sty.fps} fps with Old dive camera`);
+  check('the underwater music can be changed', sty.tracks >= 6 && sty.ambient === 'whales' && (sty.music === 'whales' || sty.music === 'title'), `${sty.tracks} tracks, playing ${sty.music}`);
+  // The first-run benchmark (only runs by itself outside debug runs): it picks a preset, applies
+  // it and remembers it with this account's settings.
+  const ben = await run(`
+    const before = !!db.settings.benchmark; // debug runs don't benchmark on their own
+    const shown = [];
+    const watch = setInterval(() => shown.push(!document.getElementById('benchrun').hidden), 100);
+    const out = await db.runBenchmark({ quick: true });
+    clearInterval(watch);
+    const saved = JSON.parse(localStorage.getItem('deeperbloom-settings') || '{}');
+    return { before, overlay: shown.some(Boolean), hidden: document.getElementById('benchrun').hidden, chosen: out?.chosen, tried: out?.results.length,
+      saved: saved.benchmark?.preset, scale: saved.renderScale, pr: db.renderer.getPixelRatio() };`);
+  check('the benchmark picks graphics settings and remembers them', !ben.before && ben.overlay && ben.hidden && ben.chosen && ben.saved === ben.chosen && typeof ben.scale === 'number',
+    `${ben.chosen} after ${ben.tried} preset(s), pixel ratio ${ben.pr?.toFixed(2)}`);
+  // The check in play: with short windows (for the test), play either confirms the benchmark's
+  // choice or steps it down, and records that.
+  const pc = await run(`
+    const B = await import('./src/benchmark.js');
+    const keep = { ...B.PLAYCHECK };
+    Object.assign(B.PLAYCHECK, { settle: 0.3, window: 0.6 });
+    db.settings.applyBenchmark(null, { preset: 'high', hz: 60, at: Date.now(), results: [] });
+    db.camera.position.set(0, 12, 24);
+    await new Promise((r) => setTimeout(r, 4500));
+    Object.assign(B.PLAYCHECK, keep);
+    const b = db.settings.benchmark;
+    return { confirmed: !!b.confirmed, stepped: b.stepped || 0, preset: b.preset, playFps: b.playFps };`);
+  check('play confirms the benchmark or steps it down', pc.confirmed || pc.stepped > 0, `${pc.preset}, ${pc.confirmed ? 'confirmed' : `lowered ${pc.stepped}x`} at ${pc.playFps} fps`);
   check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 } catch (e) {
   check('smoke test ran', false, e.message);

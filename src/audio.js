@@ -16,8 +16,47 @@ const THEMES = {
     chordLen: 11, pad: 'sine', lp: 650, padGain: 0.05, bellChance: 0.45, bellGap: [1.6, 3.2], bellGain: 0.045,
     drone: true, whaleEvery: 3,
   },
+  // ---- Underwater music you can pick (Options → Sound) ----
+  // "Abyssal drone": D minor, very low and very slow; the odd bell from far off.
+  abyss: {
+    chords: [[38, 45, 50, 53], [34, 41, 46, 50], [36, 43, 48, 51], [33, 40, 45, 48]],
+    scale: [62, 65, 69, 72, 74],
+    chordLen: 16, pad: 'sine', lp: 420, padGain: 0.06, bellChance: 0.25, bellGap: [3, 7], bellGain: 0.03,
+    drone: true,
+  },
+  // "Whale song": open fifths, slow, and the whales call every bar.
+  whales: {
+    chords: [[41, 48, 53, 60], [43, 50, 55, 62], [39, 46, 51, 58], [41, 48, 55, 60]],
+    scale: [72, 74, 77, 79, 81, 84],
+    chordLen: 12, pad: 'sine', lp: 560, padGain: 0.04, bellChance: 0.3, bellGap: [2, 5], bellGain: 0.03,
+    drone: true, whaleEvery: 1,
+  },
+  // "Glass garden": bright pentatonic bells over a light, quick-moving pad.
+  glass: {
+    chords: [[55, 62, 67, 71], [52, 59, 64, 67], [57, 64, 69, 72], [50, 57, 62, 66]],
+    scale: [79, 81, 83, 86, 88, 91, 93, 95],
+    chordLen: 6, pad: 'triangle', lp: 1200, padGain: 0.022, bellChance: 0.85, bellGap: [0.35, 1.1], bellGain: 0.035,
+  },
+  // "Tidepool": warm major sevenths, with waves washing in and out.
+  tide: {
+    chords: [[48, 55, 59, 64, 67], [53, 60, 64, 69, 72], [45, 52, 55, 60, 64], [50, 57, 60, 65, 69]],
+    scale: [72, 74, 76, 79, 81, 84],
+    chordLen: 10, pad: 'triangle', lp: 800, padGain: 0.032, bellChance: 0.35, bellGap: [1.5, 3.5], bellGain: 0.035,
+    swell: true,
+  },
+  // "Ambience only": no music, just the water.
+  quiet: { chords: [[0]], scale: [], chordLen: 8, pad: 'sine', lp: 400, padGain: 0, bellChance: 0, bellGap: [4, 6], bellGain: 0 },
 };
-let theme = THEMES.reef;
+/** The underwater music you can choose from (id, name, what it's like). */
+export const AMBIENTS = [
+  ['reef', 'Sunlit reef', 'The original: a bright, rolling pad and scattered bells.'],
+  ['abyss', 'Abyssal drone', 'Very low and slow, like the deep trenches.'],
+  ['whales', 'Whale song', 'Open, slow chords, and whales calling in the distance.'],
+  ['glass', 'Glass garden', 'Bright bells chiming over a light pad.'],
+  ['tide', 'Tidepool', 'Warm chords with waves washing in and out.'],
+  ['quiet', 'Ambience only', 'No music: just the water around you.'],
+];
+let theme = THEMES.reef, ambientId = 'reef', inWater = true;
 
 const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -110,9 +149,10 @@ export function updateAudio(depth, above = false) {
   if (now >= nextChord) {
     const n = chordIdx++, chord = th.chords[n % th.chords.length];
     const pad = ctx.createBiquadFilter(); pad.type = 'lowpass'; pad.frequency.value = th.lp; pad.connect(music);
-    chord.forEach((m, i) => voice(hz(m), nextChord + i * 0.05, th.chordLen + 2, { type: th.pad, gain: th.padGain, attack: 2.2, out: pad }));
+    if (th.padGain) chord.forEach((m, i) => voice(hz(m), nextChord + i * 0.05, th.chordLen + 2, { type: th.pad, gain: th.padGain, attack: 2.2, out: pad }));
     if (th.drone) voice(hz(chord[0] - 12), nextChord, th.chordLen + 3, { gain: 0.06, attack: 3, out: pad });
     if (th.whaleEvery && n % th.whaleEvery === th.whaleEvery - 1) whale(nextChord + th.chordLen * 0.4);
+    if (th.swell) { swell(nextChord + 0.5); swell(nextChord + th.chordLen * 0.5 + 0.5); }
     nextChord += th.chordLen;
   }
   if (now >= nextBell) {
@@ -140,10 +180,33 @@ function whale(t) {
   o.start(t); o.stop(t + 4);
 }
 
-// Switches the music ('reef' in the water, 'title' on the main menu). The new theme comes
-// in on the next chord while the last one rings out.
+// A wave washing in and out: filtered noise that swells and falls over a few seconds.
+let swellBuf = null;
+function swell(t) {
+  if (!swellBuf) {
+    const len = ctx.sampleRate * 5; swellBuf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = swellBuf.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  }
+  const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+  src.buffer = swellBuf; f.type = 'bandpass'; f.Q.value = 0.7;
+  f.frequency.setValueAtTime(300, t); f.frequency.linearRampToValueAtTime(900, t + 2); f.frequency.linearRampToValueAtTime(250, t + 4.6);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.05, t + 1.8); g.gain.exponentialRampToValueAtTime(0.0001, t + 4.8);
+  src.connect(f); f.connect(g); g.connect(music);
+  src.start(t); src.stop(t + 5);
+}
+
+/** Picks the underwater music (Options → Sound): one of AMBIENTS. */
+export function setAmbient(id) {
+  if (!THEMES[id] || id === 'title') id = 'reef';
+  ambientId = id;
+  if (inWater) setMusic('reef');
+}
+
+// Switches the music ('reef' in the water, which plays your chosen track; 'title' on the main
+// menu). The new theme comes in on the next chord while the last one rings out.
 export function setMusic(name) {
-  const next = THEMES[name];
+  inWater = name !== 'title';
+  const next = THEMES[name === 'reef' ? ambientId : name];
   if (!next || next === theme) return;
   theme = next;
   if (ctx) nextChord = Math.min(nextChord, ctx.currentTime + 0.6);
@@ -375,7 +438,7 @@ export const audioReady = () => !!ctx;
 
 // For debugging: is sound running, and which music is playing?
 export const audioState = () => ({
-  running: ctx?.state === 'running', music: Object.keys(THEMES).find((k) => THEMES[k] === theme),
+  running: ctx?.state === 'running', music: Object.keys(THEMES).find((k) => THEMES[k] === theme), ambient: ambientId,
   volumes: { ...vol }, masterGain: master ? +master.gain.value.toFixed(3) : null,
   musicWarp: +warpAmount.toFixed(2), musicWet: musicWet ? +musicWet.gain.value.toFixed(2) : 0,
 });

@@ -25,7 +25,7 @@ npm run verify
 
 - `npm run check`: parses every game, Electron and tool file the way the browser and Electron will (catches syntax slips that would break the game at startup).
 - `npm test`: unit tests for progression and survival (`test/*.test.js`, Node's built-in test runner).
-- `npm run smoke`: boots the real game in an off-screen Electron window with a throwaway profile (your save is never touched), then starts a new game, swims, opens every phone tab, scans, climbs a raft, earns goals, learns a skill, saves, pauses, saves to a slot, opens every Options tab, rebinds a key, goes to the main menu and loads the slot back. Fails on any page error.
+- `npm run smoke`: boots the real game in an off-screen Electron window with a throwaway profile (your save is never touched), then starts a new game, swims, opens every phone tab, scans, climbs a raft, earns goals, learns a skill, saves, pauses, saves to a slot, opens every Options tab, rebinds a key, goes to the main menu and loads the slot back. Fails on any page error. It always uses world seed 7, so its checks are repeatable (`$env:SMOKE_SEED=123` tries another world; in debug runs `DEEPER_BLOOM_SEED` fixes the seed for new games).
 
 ## The world
 
@@ -123,3 +123,19 @@ The Flutter shell (`../deeper_bloom_shell`) was an experiment and is retired: it
 **Ride the current** (fast travel): once Navigation is back (build a research station), the Map app lists places you know (Echo, your rafts, and the outpost once you've found it) with how far away they are. Pick one and you ride the reef's currents there in a fade, for 6% visor power (you need at least 10%). Places closer than 60 m aren't offered. The Guide tab has a page on it.
 
 The controls hint at the start of a dive shows your own key bindings as keys, for 14 seconds; the tutorial and the phone's Guide cover the rest. Apps the flood took show as *Lost* in the phone's tab bar. *Into the deep* only counts depth you reach yourself (you start the game 19 m down), so it no longer pays out the moment you arrive.
+
+## Looks and music
+
+**Looks** (Options → Display & help → Look): a colour-grading shader over the 3D world (the HUD stays crisp on top). *Clean* (the default, no shader), *Deep cinema* (soft vignette, fine grain, lens fringing), *Bioluminescent* (richer colour, deeper blacks), *Murky water* (silty, green, close), *Old dive camera* (banded colour, scanlines, grain, colour bleed), *Sonar mono* (black and green) and *Shallows* (warm and sunlit). Every look is one shader with different settings (`src/looks.js`), so switching never stalls, and it costs no measurable frame rate. With Reduce flashing on, the grain holds still.
+
+**Underwater music** (Options → Sound): *Sunlit reef* (the original), *Abyssal drone*, *Whale song*, *Glass garden*, *Tidepool* (with waves washing in and out) or *Ambience only*. All synthesized like the rest of the sound (`src/audio.js`); the main menu keeps its own theme, and whichever track you pick still warps underwater.
+
+## First-run benchmark
+
+The first time the game starts on a Windows account, a card over the title screen ("Tuning Deeper Bloom for this PC", about 15 seconds, skippable) benchmarks it. It measures the screen's refresh rate, then renders three demanding views (the reef round Echo, low over the open seabed far out, and above the water looking over the atoll) with the visor HUD showing, at each graphics preset from best to cheapest: **Ultra, High, Medium, Low, Very low** (resolution scale, glow, render distance, scenery distance and chunk size). It keeps the first preset that runs smoothly: an average of at least 55 fps with 15% headroom (or 92% of a slower screen's refresh rate, so a 60 Hz monitor isn't held against the PC) and no regular stutters. The result is saved with that account's settings, so it never runs again on its own.
+
+Play adds more than the title screen can show (creatures, combat, the visor's glitches), so for the first minutes of play the game also watches the real frame rate: an 8-second stretch that isn't smooth steps the graphics down one preset (with a toast saying so); three smooth stretches in a row confirm the choice and the check stops for good. Changing any performance setting yourself stops it too, so your choice always wins.
+
+Options → Display shows what the benchmark picked (and whether play confirmed it), has **Run the benchmark again**, and **Reset performance** goes back to the benchmark's choice. New settings there: **Resolution** (50-100%: the 3D world's pixel count; the HUD stays sharp) and **Glow (bloom)**. The logic is in `src/benchmark.js` (pure, unit-tested); debug runs skip the automatic benchmark unless the URL has `&bench`.
+
+Performance notes from building it: the visor overlay was the biggest per-frame cost in play. The crack glints now animate as tiny composited elements instead of inside the full-screen crack SVG (which repainted the whole screen of cracks, with its shadow, every frame), the HUD only writes CSS variables when they change, and the fog blur and blight blobs only exist while you have them.
