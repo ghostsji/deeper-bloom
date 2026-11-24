@@ -229,6 +229,10 @@ button.primary.small { font-size: 14px; padding: 10px 24px; }
 .slot-info b { font-weight: 600; }
 .slot-info small { color: var(--muted); font-size: 13px; }
 .slot-over { color: var(--gold); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+.credits { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 8px 0 18px; font-size: 14px; }
+.credits dt { color: var(--cyan); text-align: right; }
+.credits dd { margin: 0; text-align: left; }
+.credits-license { font-size: 14px; line-height: 1.5; margin: 4px 0 18px; }
 .slot-msg { min-height: 20px; margin: 6px 0 0; color: var(--cyan); font-size: 14px; }
 .confirm-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .confirm-btns .secondary, .confirm-btns .danger { margin: 0; }

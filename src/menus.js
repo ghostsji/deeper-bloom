@@ -1,7 +1,7 @@
 import { listSlots, readSlot, writeSlot } from './saves.js';
 
-// The main menu (Continue, New game, Load game, Save game, Options, Exit), the save and load
-// slots, and the "start a new game?" check. g: { hasSave(), canExit, currentSave() -> { data,
+// The main menu (Continue, New game, Load game, Save game, Options, Credits, Exit), the save and
+// load slots, the credits, and the "start a new game?" check. g: { hasSave(), canExit, currentSave() -> { data,
 // summary }, onContinue(), onStartNew(), onLoad(data, slot), onOptions(), onExit(), sound(kind) }
 export function createMenus({ main, slots, confirm }, g) {
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -28,6 +28,7 @@ export function createMenus({ main, slots, confirm }, g) {
     if (act === 'load') openSlots(false);
     if (act === 'save') openSlots(true);
     if (act === 'options') g.onOptions();
+    if (act === 'credits') openCredits();
     if (act === 'exit') g.onExit();
   });
 
@@ -80,6 +81,26 @@ export function createMenus({ main, slots, confirm }, g) {
     }
   });
 
+  // ---- Credits ----
+  // Shown in the slots overlay, so Back, clicking outside and the menu sounds work the same way.
+  function openCredits() {
+    back = null;
+    slots.innerHTML = `<div class="card slots-card credits-card">
+      <p class="eyebrow">Credits</p>
+      <h2>Deeper Bloom</h2>
+      <dl class="credits">
+        <dt>Made by</dt><dd>ghostsji</dd>
+        <dt>Built with</dt><dd>three.js (MIT License) and Electron (MIT License)</dd>
+        <dt>Music and sound</dt><dd>Made live by the game as you play</dd>
+        <dt>Echo's voice</dt><dd>Microsoft neural text-to-speech voices. The clips are not covered by the game's license.</dd>
+      </dl>
+      <p class="eyebrow">License</p>
+      <p class="credits-license">Deeper Bloom is licensed under the PolyForm Noncommercial License 1.0.0. You may play, study, change and share it for any noncommercial purpose; selling it needs the author's permission. The full text is in <b>LICENSE.md</b> next to the game, and at github.com/ghostsji/deeper-bloom.</p>
+      <button type="button" class="secondary" data-back>Back</button>
+    </div>`;
+    slots.hidden = false;
+  }
+
   // ---- New game? ----
   function showConfirm() {
     confirm.innerHTML = `<div class="card">
@@ -110,5 +131,5 @@ export function createMenus({ main, slots, confirm }, g) {
     });
   }
 
-  return { renderMain, openSlots, get open() { return !slots.hidden || !confirm.hidden; } };
+  return { renderMain, openSlots, openCredits, get open() { return !slots.hidden || !confirm.hidden; } };
 }

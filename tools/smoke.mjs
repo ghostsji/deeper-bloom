@@ -71,6 +71,14 @@ try {
   check('the main menu shows', boot.title);
   check('a fresh profile has no Continue, Save is off, Exit is there', !boot.menu.cont && boot.menu.saveOff && boot.menu.exit);
 
+  const credits = await run(`
+    document.querySelector('[data-menu="credits"]').click();
+    await new Promise((r) => setTimeout(r, 200));
+    const slots = document.getElementById('slots'), text = slots.textContent;
+    slots.querySelector('[data-back]').click();
+    return { shown: text.includes('Credits'), license: text.includes('PolyForm Noncommercial License 1.0.0') && text.includes('LICENSE.md'), closed: slots.hidden };`);
+  check('Credits shows the license and Back closes it', credits.shown && credits.license && credits.closed, JSON.stringify(credits));
+
   const dive = await run(`
     document.getElementById('dive').click();
     await new Promise((r) => setTimeout(r, 600));
