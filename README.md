@@ -2,6 +2,12 @@
 
 Deep Bloom 2: a first-person dive through the glowing reef. Desktop only, fullscreen, mouse and keyboard.
 
+## Download
+
+Get the Windows build from [Releases](https://github.com/ghostsji/deeper-bloom/releases/latest): download `DeeperBloom-win32-x64.zip`, unzip it anywhere and run `Deeper Bloom.exe`. Windows SmartScreen may warn because the exe isn't signed: choose *More info → Run anyway*.
+
+The game is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE.md): free to play, study, mod and share for noncommercial purposes; selling it needs permission. The zip includes the license as `LICENSE.md`. Echo's voice clips aren't covered (see [License](#license)).
+
 ## Run
 
 ```bash
